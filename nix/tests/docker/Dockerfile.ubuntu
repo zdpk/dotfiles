@@ -1,0 +1,54 @@
+# Test environment for Ubuntu Linux
+FROM ubuntu:22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV USER=testuser
+ENV HOME=/home/$USER
+ENV SHELL=/usr/bin/bash
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    sudo \
+    xz-utils \
+    ca-certificates \
+    build-essential \
+    systemd \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create test user with sudo privileges
+RUN useradd -m -s /bin/bash $USER && \
+    echo "$USER ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Switch to test user
+USER $USER
+WORKDIR $HOME
+
+# Install Nix (multi-user installation)
+RUN curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install linux \
+    --extra-conf "sandbox = false" \
+    --init none \
+    --no-confirm
+
+# Source Nix environment
+ENV PATH="/nix/var/nix/profiles/default/bin:$PATH"
+RUN echo 'if [ -e /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh; fi' >> ~/.bashrc
+
+# Enable experimental features
+RUN mkdir -p ~/.config/nix && \
+    echo "experimental-features = nix-command flakes" > ~/.config/nix/nix.conf
+
+# Copy dotfiles
+COPY --chown=$USER:$USER . $HOME/dotfiles/
+
+# Set working directory
+WORKDIR $HOME/dotfiles/nix
+
+# Install required packages for testing
+RUN . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh && \
+    nix profile install nixpkgs#bash nixpkgs#coreutils nixpkgs#findutils
+
+# Default command
+CMD ["/bin/bash"]

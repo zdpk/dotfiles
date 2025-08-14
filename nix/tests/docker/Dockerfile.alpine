@@ -1,0 +1,50 @@
+# Test environment for Alpine Linux (lightweight)
+FROM alpine:3.18
+
+# Set environment variables
+ENV USER=testuser
+ENV HOME=/home/$USER
+ENV SHELL=/bin/bash
+
+# Install system dependencies
+RUN apk add --no-cache \
+    curl \
+    git \
+    bash \
+    sudo \
+    shadow \
+    xz \
+    ca-certificates \
+    build-base \
+    linux-headers
+
+# Create test user with sudo privileges
+RUN adduser -D -s /bin/bash $USER && \
+    echo "$USER ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Switch to test user
+USER $USER
+WORKDIR $HOME
+
+# Install Nix (single-user installation for Alpine with BusyBox compatibility)
+RUN curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install linux \
+    --no-confirm \
+    --init none \
+    --extra-conf "sandbox = false"
+
+# Source Nix environment
+ENV PATH="/nix/var/nix/profiles/default/bin:$PATH"
+RUN echo 'if [ -e /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh; fi' >> ~/.bashrc
+
+# Enable experimental features
+RUN mkdir -p ~/.config/nix && \
+    echo "experimental-features = nix-command flakes" > ~/.config/nix/nix.conf
+
+# Copy dotfiles
+COPY --chown=$USER:$USER . $HOME/dotfiles/
+
+# Set working directory
+WORKDIR $HOME/dotfiles/nix
+
+# Default command
+CMD ["/bin/bash"]

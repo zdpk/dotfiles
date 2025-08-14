@@ -1,0 +1,31 @@
+# Test environment for NixOS (native Nix environment)  
+FROM nixos/nix:2.18
+
+# Set environment variables
+ENV USER=testuser
+ENV HOME=/home/$USER
+
+# Enable experimental features
+RUN echo "experimental-features = nix-command flakes" >> /etc/nix/nix.conf && \
+    echo "accept-flake-config = true" >> /etc/nix/nix.conf
+
+# Create test user with proper home directory
+RUN adduser -D -s /bin/bash $USER && \
+    mkdir -p $HOME && \
+    chown $USER:$USER $HOME
+
+# Install additional packages needed for testing
+RUN nix profile install nixpkgs#bash nixpkgs#coreutils nixpkgs#findutils nixpkgs#git
+
+# Switch to test user
+USER $USER
+WORKDIR $HOME
+
+# Copy dotfiles
+COPY --chown=$USER:$USER . $HOME/dotfiles/
+
+# Set working directory
+WORKDIR $HOME/dotfiles/nix
+
+# Default command
+CMD ["/bin/bash"]

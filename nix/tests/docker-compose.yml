@@ -1,0 +1,69 @@
+services:
+  # Ubuntu test environment
+  test-ubuntu:
+    build:
+      context: ..
+      dockerfile: tests/docker/Dockerfile.ubuntu
+    container_name: nix-dotfiles-test-ubuntu
+    environment:
+      - TERM=xterm-256color
+    volumes:
+      - ..:/home/testuser/dotfiles:ro
+    working_dir: /home/testuser/dotfiles/nix
+    command: >
+      bash -c "
+        source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh &&
+        tests/scripts/test-config.sh &&
+        tests/scripts/integration-test.sh
+      "
+  
+  # Alpine test environment  
+  test-alpine:
+    build:
+      context: ..
+      dockerfile: tests/docker/Dockerfile.alpine
+    container_name: nix-dotfiles-test-alpine
+    environment:
+      - TERM=xterm-256color
+    volumes:
+      - ..:/home/testuser/dotfiles:ro
+    working_dir: /home/testuser/dotfiles/nix
+    command: >
+      bash -c "
+        source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh &&
+        tests/scripts/test-config.sh &&
+        tests/scripts/integration-test.sh
+      "
+  
+  # NixOS test environment
+  test-nixos:
+    build:
+      context: ..
+      dockerfile: tests/docker/Dockerfile.nixos
+    container_name: nix-dotfiles-test-nixos
+    environment:
+      - TERM=xterm-256color
+      - NIX_PATH=nixpkgs=https://github.com/NixOS/nixpkgs/archive/nixos-unstable.tar.gz
+    volumes:
+      - ..:/home/testuser/dotfiles:ro
+    working_dir: /home/testuser/dotfiles/nix
+    command: >
+      bash -c "
+        tests/scripts/test-config.sh &&
+        tests/scripts/integration-test.sh
+      "
+
+  # Interactive test environment (Ubuntu-based)
+  test-interactive:
+    build:
+      context: ..
+      dockerfile: tests/docker/Dockerfile.ubuntu
+    container_name: nix-dotfiles-interactive
+    environment:
+      - TERM=xterm-256color
+    volumes:
+      - ..:/home/testuser/dotfiles
+    working_dir: /home/testuser/dotfiles/nix
+    stdin_open: true
+    tty: true
+    command: bash

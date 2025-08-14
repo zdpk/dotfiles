@@ -1,0 +1,253 @@
+name: Test Nix Dotfiles
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'nix/**'
+      - '.github/workflows/test.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'nix/**'
+      - '.github/workflows/test.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-check:
+    name: Lint and Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v8
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v2
+
+      - name: Check flake syntax
+        run: |
+          cd nix
+          nix flake check --show-trace
+
+      - name: Validate configurations
+        run: |
+          cd nix
+          # Test that all configurations can be built
+          nix build '.#homeConfigurations."x@linux".activationPackage' --no-link --show-trace
+          
+  test-linux:
+    name: Test Linux Environments
+    runs-on: ubuntu-latest
+    needs: lint-and-check
+    strategy:
+      fail-fast: false
+      matrix:
+        environment:
+          - ubuntu
+          - alpine
+          - nixos
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run tests on ${{ matrix.environment }}
+        run: |
+          cd nix/tests
+          ./run-tests.sh --build --clean ${{ matrix.environment }}
+        timeout-minutes: 30
+
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v8
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v2
+
+      - name: Run configuration tests
+        run: |
+          cd nix
+          tests/scripts/test-config.sh
+
+      - name: Run integration tests
+        run: |
+          cd nix
+          tests/scripts/integration-test.sh
+
+      - name: Test Home Manager activation (dry-run)
+        run: |
+          cd nix
+          nix run home-manager -- switch --flake '.#x@linux' --dry-run
+
+  test-performance:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v8
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - name: Setup Nix cache  
+        uses: DeterminateSystems/magic-nix-cache-action@v2
+
+      - name: Benchmark flake evaluation
+        run: |
+          cd nix
+          echo "Testing flake evaluation performance..."
+          
+          # Test multiple runs and get average
+          times=()
+          for i in {1..5}; do
+            start=$(date +%s.%N)
+            nix flake show . >/dev/null 2>&1
+            end=$(date +%s.%N)
+            time=$(echo "$end - $start" | bc -l)
+            times+=($time)
+            echo "Run $i: ${time}s"
+          done
+          
+          # Calculate average
+          total=0
+          for time in "${times[@]}"; do
+            total=$(echo "$total + $time" | bc -l)
+          done
+          average=$(echo "scale=3; $total / ${#times[@]}" | bc -l)
+          echo "Average evaluation time: ${average}s"
+          
+          # Fail if average > 10 seconds
+          if (( $(echo "$average > 10" | bc -l) )); then
+            echo "Performance test failed: evaluation too slow (${average}s > 10s)"
+            exit 1
+          fi
+
+      - name: Test build performance
+        run: |
+          cd nix
+          echo "Testing build performance..."
+          
+          start=$(date +%s.%N)
+          nix build '.#homeConfigurations."x@linux".activationPackage' --no-link
+          end=$(date +%s.%N)
+          time=$(echo "$end - $start" | bc -l)
+          
+          echo "Build time: ${time}s"
+          
+          # Fail if build > 120 seconds (2 minutes)
+          if (( $(echo "$time > 120" | bc -l) )); then
+            echo "Performance test failed: build too slow (${time}s > 120s)"
+            exit 1
+          fi
+
+  # Security scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint-and-check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Scan for secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./nix
+          base: main
+          head: HEAD
+
+      - name: Check for suspicious patterns
+        run: |
+          cd nix
+          echo "Checking for suspicious patterns..."
+          
+          # Check for hardcoded secrets
+          if grep -r "password\|secret\|token" --include="*.nix" . | grep -v "programs.git"; then
+            echo "Potential secrets found!"
+            exit 1
+          fi
+          
+          # Check for eval/exec patterns
+          if grep -r "eval\|exec" --include="*.nix" .; then
+            echo "Potential code execution found!"
+            exit 1
+          fi
+          
+          echo "Security scan passed"
+
+  # Test results summary
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [test-linux, test-integration, test-performance, security-scan]
+    if: always()
+    steps:
+      - name: Check test results
+        run: |
+          echo "Test Results Summary:"
+          echo "===================="
+          
+          if [[ "${{ needs.test-linux.result }}" == "success" ]]; then
+            echo "✅ Linux Environment Tests: PASSED"
+          else
+            echo "❌ Linux Environment Tests: FAILED"
+          fi
+          
+          if [[ "${{ needs.test-integration.result }}" == "success" ]]; then
+            echo "✅ Integration Tests: PASSED"  
+          else
+            echo "❌ Integration Tests: FAILED"
+          fi
+          
+          if [[ "${{ needs.test-performance.result }}" == "success" ]]; then
+            echo "✅ Performance Tests: PASSED"
+          else
+            echo "❌ Performance Tests: FAILED"
+          fi
+          
+          if [[ "${{ needs.security-scan.result }}" == "success" ]]; then
+            echo "✅ Security Scan: PASSED"
+          else
+            echo "❌ Security Scan: FAILED"
+          fi
+          
+          # Check if any tests failed
+          if [[ "${{ needs.test-linux.result }}" != "success" ]] || \
+             [[ "${{ needs.test-integration.result }}" != "success" ]] || \
+             [[ "${{ needs.test-performance.result }}" != "success" ]] || \
+             [[ "${{ needs.security-scan.result }}" != "success" ]]; then
+            echo "Some tests failed!"
+            exit 1
+          fi
+          
+          echo "All tests passed! 🎉"
