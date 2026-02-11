@@ -33,7 +33,7 @@ ln -sf "${SRC_DIR}/zellij/config.kdl" "${DST_DIR}/zellij/config.kdl"
 ln -sf "${SRC_DIR}/helix/" "${DST_DIR}/"
 
 # Bash
-ln -sf "${SRC_DIR}/bash/.bashrc" "${DST_DIR}/.bashrc"
+ln -sf "${SRC_DIR}/bash/.bashrc" "$HOME/.bashrc"
 mkdir -p "${DST_DIR}/bash"
 # link all files in bash directory
 for FILE in "${SRC_DIR}/bash/"*; do
