@@ -43,7 +43,7 @@ check_remapper_conflicts() {
     conflict=1
   fi
 
-  if "$PGREP" -f 'karabiner_(grabber|observer)|Karabiner-Elements' >/dev/null 2>&1; then
+  if "$PGREP" -f '/Contents/MacOS/(Karabiner-Elements|Karabiner-Core-Service|Karabiner-Menu|Karabiner-NotificationWindow)$|/(karabiner_grabber|karabiner_observer|karabiner_console_user_server)$' >/dev/null 2>&1; then
     warn "Karabiner is running; it must be disabled before this module owns right Command"
     conflict=1
   fi
