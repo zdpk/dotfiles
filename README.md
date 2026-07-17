@@ -20,9 +20,40 @@ Apply the current platform configuration:
 
 The existing files under `config/` remain the source for development-tool settings. Platform-specific automation belongs under `scripts/macos/` and `scripts/ubuntu/`.
 
-## macOS
+## macOS input-source keys
 
-The macOS module configures native input-source switching. See `docs/plans/` for the behavior and architecture.
+The first macOS module configures two dedicated language keys:
+
+```text
+physical right Command -> hidutil F18 -> native Swift helper -> English/Korean
+physical right Option  -> hidutil F19 -> native Swift helper -> Japanese
+```
+
+Before applying it, enable these input sources under System Settings > Keyboard > Text Input:
+
+1. ABC
+2. Korean, 2-Set Korean
+3. Japanese, Romaji
+
+The behavior is:
+
+```text
+right Command: English -> Korean, Korean -> English
+right Option:  English/Korean -> Japanese
+right Command from Japanese: return to the last English/Korean source
+```
+
+The module:
+
+- builds a small release-mode SwiftPM executable;
+- registers F18/F19 with Carbon so the hotkeys survive Secure Input;
+- selects exact input sources through the macOS Text Input Source API;
+- owns the complete `hidutil` `UserKeyMapping` array;
+- installs per-user LaunchAgents for the helper and mappings;
+- reapplies the mappings immediately and at login;
+- refuses an actual run while Hammerspoon, Karabiner, or the legacy Nix mapping is active.
+
+Hammerspoon and Karabiner are not required. Left Command and left Option remain normal modifiers. Right Command-Space cannot open Spotlight because physical right Command is no longer a Command modifier. The helper is already resident, caches all input-source objects, and performs no polling, timers, retries, shell calls, or AppleScript on the key path.
 
 ## Ubuntu
 
@@ -33,3 +64,5 @@ Ubuntu modules use the same ordered, idempotent execution contract. No Ubuntu-on
 ```bash
 ./tests/test.sh
 ```
+
+The test checks Swift policy behavior, the release build, Bash syntax, LaunchAgent plists, HID usages, and repeated bootstrap execution. If `shellcheck` is installed, it runs automatically.

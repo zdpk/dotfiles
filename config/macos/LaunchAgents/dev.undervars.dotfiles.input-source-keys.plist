@@ -3,14 +3,14 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>dev.undervars.dotfiles.input-source-cycle</string>
+  <string>dev.undervars.dotfiles.input-source-keys</string>
 
   <key>ProgramArguments</key>
   <array>
     <string>/usr/bin/hidutil</string>
     <string>property</string>
     <string>--set</string>
-    <string>{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x7000000E7,"HIDKeyboardModifierMappingDst":0xFF00000003}]}</string>
+    <string>{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x7000000E7,"HIDKeyboardModifierMappingDst":0x70000006D},{"HIDKeyboardModifierMappingSrc":0x7000000E6,"HIDKeyboardModifierMappingDst":0x70000006E}]}</string>
   </array>
 
   <key>LimitLoadToSessionType</key>

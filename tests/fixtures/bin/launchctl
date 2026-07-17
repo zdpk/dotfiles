@@ -4,16 +4,27 @@ set -euo pipefail
 
 : "${DOTFILES_TEST_STATE:?}"
 
+label_from_service() {
+  printf '%s\n' "${1##*/}"
+}
+
+label_from_plist() {
+  basename "$1" .plist
+}
+
 case "${1:-}" in
   print)
-    [ -f "$DOTFILES_TEST_STATE/launch-agent-loaded" ]
+    label="$(label_from_service "${2:-}")"
+    [ -f "$DOTFILES_TEST_STATE/launch-agent-$label" ]
     ;;
   bootstrap)
     [ -f "${3:-}" ]
-    : >"$DOTFILES_TEST_STATE/launch-agent-loaded"
+    label="$(label_from_plist "${3:-}")"
+    : >"$DOTFILES_TEST_STATE/launch-agent-$label"
     ;;
   bootout)
-    rm -f "$DOTFILES_TEST_STATE/launch-agent-loaded"
+    label="$(label_from_service "${2:-}")"
+    rm -f "$DOTFILES_TEST_STATE/launch-agent-$label"
     ;;
   *)
     printf 'unexpected launchctl invocation: %s\n' "$*" >&2

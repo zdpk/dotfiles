@@ -9,8 +9,12 @@ if [ "${1:-}" = "property" ] && [ "${2:-}" = "--get" ] && [ "${3:-}" = "UserKeyM
     cat <<'EOF'
 (
     {
-        HIDKeyboardModifierMappingDst = 1095216660483;
+        HIDKeyboardModifierMappingDst = 30064771181;
         HIDKeyboardModifierMappingSrc = 30064771303;
+    },
+    {
+        HIDKeyboardModifierMappingDst = 30064771182;
+        HIDKeyboardModifierMappingSrc = 30064771302;
     }
 )
 EOF
@@ -22,7 +26,9 @@ fi
 
 if [ "${1:-}" = "property" ] && [ "${2:-}" = "--set" ]; then
   printf '%s\n' "${3:-}" | grep -q '0x7000000E7'
-  printf '%s\n' "${3:-}" | grep -q '0xFF00000003'
+  printf '%s\n' "${3:-}" | grep -q '0x70000006D'
+  printf '%s\n' "${3:-}" | grep -q '0x7000000E6'
+  printf '%s\n' "${3:-}" | grep -q '0x70000006E'
   : >"$DOTFILES_TEST_STATE/mapping"
   exit 0
 fi
