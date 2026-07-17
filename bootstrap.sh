@@ -61,9 +61,9 @@ detect_platform() {
   esac
 }
 
-run_platform_modules() {
-  local platform="$1"
-  local module_dir="$DOTFILES_ROOT/scripts/$platform"
+run_modules() {
+  local group="$1"
+  local module_dir="$DOTFILES_ROOT/scripts/$group"
   local module
   local module_count=0
 
@@ -81,11 +81,12 @@ run_platform_modules() {
   done
 
   if [ "$module_count" -eq 0 ]; then
-    log "no modules configured for $platform"
+    log "no modules configured for $group"
   fi
 }
 
 platform="$(detect_platform)"
 log "platform: $platform"
-run_platform_modules "$platform"
+run_modules common
+run_modules "$platform"
 log "bootstrap complete"

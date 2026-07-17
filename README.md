@@ -18,7 +18,11 @@ Apply the current platform configuration:
 ./bootstrap.sh
 ```
 
-The existing files under `config/` remain the source for development-tool settings. Platform-specific automation belongs under `scripts/macos/` and `scripts/ubuntu/`.
+`bootstrap.sh` runs `scripts/common/` first. It then detects macOS or Ubuntu and runs only that platform's numbered modules. Other Linux distributions fail explicitly.
+
+The existing files under `config/` remain the source for development-tool settings. The common module links Bash, Helix, WezTerm, and Zellij configuration. Existing conflicting paths are moved once to `~/.local/state/dotfiles/backups/` before linking.
+
+The repository is Bash-first. The former Nix configuration has been removed. Platform-specific automation belongs under `scripts/macos/` and `scripts/ubuntu/`.
 
 ## macOS input-source keys
 
@@ -65,4 +69,4 @@ Ubuntu modules use the same ordered, idempotent execution contract. No Ubuntu-on
 ./tests/test.sh
 ```
 
-The test checks Swift policy behavior, the release build, Bash syntax, LaunchAgent plists, HID usages, and repeated bootstrap execution. If `shellcheck` is installed, it runs automatically.
+On macOS, the test checks Swift policy behavior, the release build, Bash syntax, LaunchAgent plists, HID usages, common configuration links, backup behavior, and repeated bootstrap execution. If `shellcheck` is installed, it runs automatically.
