@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+: "${DOTFILES_TEST_STATE:?}"
+
+if [ "${1:-}" = "property" ] && [ "${2:-}" = "--get" ] && [ "${3:-}" = "UserKeyMapping" ]; then
+  if [ -f "$DOTFILES_TEST_STATE/mapping" ]; then
+    cat <<'EOF'
+(
+    {
+        HIDKeyboardModifierMappingDst = 1095216660483;
+        HIDKeyboardModifierMappingSrc = 30064771303;
+    }
+)
+EOF
+  else
+    printf '%s\n' '(null)'
+  fi
+  exit 0
+fi
+
+if [ "${1:-}" = "property" ] && [ "${2:-}" = "--set" ]; then
+  printf '%s\n' "${3:-}" | grep -q '0x7000000E7'
+  printf '%s\n' "${3:-}" | grep -q '0xFF00000003'
+  : >"$DOTFILES_TEST_STATE/mapping"
+  exit 0
+fi
+
+printf 'unexpected hidutil invocation: %s\n' "$*" >&2
+exit 2

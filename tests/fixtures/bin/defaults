@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+: "${DOTFILES_TEST_STATE:?}"
+
+case "${1:-}:${2:-}:${3:-}" in
+  read:com.apple.HIToolbox:AppleEnabledInputSources)
+    cat <<'EOF'
+(
+    {
+        InputSourceKind = "Keyboard Layout";
+        "KeyboardLayout Name" = ABC;
+    },
+    {
+        "Input Mode" = "com.apple.inputmethod.Korean.2SetKorean";
+    },
+    {
+        "Input Mode" = "com.apple.inputmethod.Japanese";
+    }
+)
+EOF
+    ;;
+  read:com.apple.HIToolbox:AppleFnUsageType)
+    [ -f "$DOTFILES_TEST_STATE/fn-usage" ] || exit 1
+    cat "$DOTFILES_TEST_STATE/fn-usage"
+    ;;
+  write:com.apple.HIToolbox:AppleFnUsageType)
+    [ "${4:-}" = "-int" ]
+    [ "${5:-}" = "1" ]
+    printf '%s\n' '1' >"$DOTFILES_TEST_STATE/fn-usage"
+    ;;
+  *)
+    printf 'unexpected defaults invocation: %s\n' "$*" >&2
+    exit 2
+    ;;
+esac

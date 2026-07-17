@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+: "${DOTFILES_TEST_STATE:?}"
+
+case "${1:-}" in
+  print)
+    [ -f "$DOTFILES_TEST_STATE/launch-agent-loaded" ]
+    ;;
+  bootstrap)
+    [ -f "${3:-}" ]
+    : >"$DOTFILES_TEST_STATE/launch-agent-loaded"
+    ;;
+  bootout)
+    rm -f "$DOTFILES_TEST_STATE/launch-agent-loaded"
+    ;;
+  *)
+    printf 'unexpected launchctl invocation: %s\n' "$*" >&2
+    exit 2
+    ;;
+esac

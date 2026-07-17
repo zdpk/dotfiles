@@ -1,28 +1,35 @@
-# Dotfiles Setup
+# dotfiles
 
-`dotfiles` for development environment
+Idempotent Bash bootstrap for macOS and Ubuntu.
 
-## Usage
+## Run
+
+Clone the repository and inspect the planned changes:
 
 ```bash
-# 1. move to your home directory
-$ cd $HOME
-
-# 2. clone the `.dotfiles` repository
-$ git clone https://github.com/xezv/dotfiles
-
-# 3. move to the cloned directory
-cd dotfiles
-
-# 4. grant execution permission to the setup script
-$ chmod +x setup.sh
-
-# 5. run setup script
-$ ./setup.sh
+git clone https://github.com/zdpk/dotfiles.git ~/ws/personal/dotfiles
+cd ~/ws/personal/dotfiles
+./bootstrap.sh --dry-run
 ```
 
-done.
+Apply the current platform configuration:
 
-notice that `dotfiles` directory is not deleted after setup.
+```bash
+./bootstrap.sh
+```
 
-config files created by the `setup.sh` script are just symlinks.
+The existing files under `config/` remain the source for development-tool settings. Platform-specific automation belongs under `scripts/macos/` and `scripts/ubuntu/`.
+
+## macOS
+
+The macOS module configures native input-source switching. See `docs/plans/` for the behavior and architecture.
+
+## Ubuntu
+
+Ubuntu modules use the same ordered, idempotent execution contract. No Ubuntu-only settings are configured yet.
+
+## Test
+
+```bash
+./tests/test.sh
+```
