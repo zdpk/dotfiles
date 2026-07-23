@@ -1,5 +1,10 @@
 # macOS input-source switcher design
 
+> This document describes the currently installed prototype. It is superseded
+> as a product specification by
+> [keyon product requirements](./2026-07-23-keyon-prd.md). The existing behavior
+> remains documented here until implementation is migrated.
+
 ## Goal
 
 Provide fast, deterministic English, Korean, and Japanese switching with only native macOS APIs, `hidutil`, and a minimal Swift helper.
