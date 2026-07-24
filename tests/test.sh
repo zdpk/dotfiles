@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ADC_ACCOUNT="$ROOT/bin/gcloud-adc-account"
 KEYS_PLIST="$ROOT/config/macos/LaunchAgents/dev.undervars.dotfiles.input-source-keys.plist"
 SWITCHER_PLIST="$ROOT/config/macos/LaunchAgents/dev.undervars.dotfiles.input-source-switcher.plist"
 PACKAGE="$ROOT/config/macos/InputSourceSwitcher"
@@ -19,6 +20,11 @@ mkdir -p \
 while IFS= read -r script; do
   bash -n "$script"
 done < <(find "$ROOT" -type f -name '*.sh' -print | sort)
+bash -n "$ADC_ACCOUNT"
+
+test "$(
+  PATH="$FIXTURE_BIN:$PATH" "$ADC_ACCOUNT"
+)" = 'adc@example.com'
 
 /usr/bin/plutil -lint "$KEYS_PLIST" >/dev/null
 /usr/bin/plutil -lint "$SWITCHER_PLIST" >/dev/null
@@ -78,6 +84,7 @@ run_isolated_bootstrap() {
 
 first_run_output="$(run_isolated_bootstrap)"
 printf '%s\n' "$first_run_output" | grep -q 'backed up:.*\.bashrc'
+printf '%s\n' "$first_run_output" | grep -q 'linked:.*\.local/bin/gcloud-adc-account'
 printf '%s\n' "$first_run_output" | grep -q 'linked:.*\.config/helix'
 printf '%s\n' "$first_run_output" | grep -q 'unloaded legacy LaunchAgent'
 printf '%s\n' "$first_run_output" | grep -q 'removed:.*input-source-cycle.plist'
@@ -88,6 +95,7 @@ printf '%s\n' "$first_run_output" | grep -q 'applied right Command -> F18, right
 
 second_run_output="$(run_isolated_bootstrap)"
 printf '%s\n' "$second_run_output" | grep -q 'unchanged:.*\.bashrc'
+printf '%s\n' "$second_run_output" | grep -q 'unchanged:.*\.local/bin/gcloud-adc-account'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged:.*\.config/helix'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged:.*input-source-switcher'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: LaunchAgent is loaded: dev.undervars.dotfiles.input-source-switcher'
@@ -96,6 +104,7 @@ printf '%s\n' "$second_run_output" | grep -q 'unchanged: right Command -> F18, r
 
 test ! -e "$TEST_ROOT/home/Library/LaunchAgents/dev.undervars.dotfiles.input-source-cycle.plist"
 test -L "$TEST_ROOT/home/.bashrc"
+test -L "$TEST_ROOT/home/.local/bin/gcloud-adc-account"
 test -L "$TEST_ROOT/home/.config/bash/alias.sh"
 test -L "$TEST_ROOT/home/.config/helix"
 grep -q 'original bashrc' "$TEST_ROOT/state-home/dotfiles/backups/.bashrc"

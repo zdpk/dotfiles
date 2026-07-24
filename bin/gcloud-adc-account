@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+for dependency in gcloud curl sed; do
+  if ! command -v "$dependency" >/dev/null 2>&1; then
+    printf 'gcloud-adc-account: required command not found: %s\n' "$dependency" >&2
+    exit 1
+  fi
+done
+
+if ! access_token="$(gcloud auth application-default print-access-token)"; then
+  printf '%s\n' \
+    'gcloud-adc-account: unable to obtain an ADC access token' >&2
+  exit 1
+fi
+
+if ! token_info="$(
+  curl -fsS \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    --data-urlencode "access_token=$access_token" \
+    'https://www.googleapis.com/oauth2/v1/tokeninfo'
+)"; then
+  unset access_token
+  printf '%s\n' \
+    'gcloud-adc-account: unable to inspect the ADC access token' >&2
+  exit 1
+fi
+unset access_token
+
+account="$(
+  printf '%s\n' "$token_info" \
+    | sed -n 's/.*"email":[[:space:]]*"\([^"]*\)".*/\1/p'
+)"
+
+if [ -z "$account" ]; then
+  printf '%s\n' \
+    'gcloud-adc-account: the ADC access token has no account email' >&2
+  exit 1
+fi
+
+printf '%s\n' "$account"
