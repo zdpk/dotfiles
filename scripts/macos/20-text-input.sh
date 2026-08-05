@@ -62,4 +62,15 @@ apply_boolean_default() {
 apply_boolean_default NSAutomaticPeriodSubstitutionEnabled false \
   'double-space period substitution off'
 
+# The remaining substitutions rewrite characters that were typed deliberately.
+# Curly quotes and en dashes are wrong in anything read back as literal text —
+# code, configuration, shell commands, commit messages — and capitalising the
+# first word of a sentence corrupts identifiers that are meant to be lowercase.
+apply_boolean_default NSAutomaticCapitalizationEnabled false \
+  'automatic capitalization off'
+apply_boolean_default NSAutomaticQuoteSubstitutionEnabled false \
+  'smart quote substitution off'
+apply_boolean_default NSAutomaticDashSubstitutionEnabled false \
+  'smart dash substitution off'
+
 log 'text input defaults applied; applications read them when next launched'

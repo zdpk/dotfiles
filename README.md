@@ -131,11 +131,15 @@ the same state:
 | Default | Value | Why |
 | --- | --- | --- |
 | `NSAutomaticPeriodSubstitutionEnabled` | `false` | Double-space inserts a period nobody typed |
+| `NSAutomaticCapitalizationEnabled` | `false` | Capitalises identifiers meant to stay lowercase |
+| `NSAutomaticQuoteSubstitutionEnabled` | `false` | Curly quotes break code, config, and shell commands |
+| `NSAutomaticDashSubstitutionEnabled` | `false` | En dashes break the same literal text |
 
 Period substitution is worth turning off for its failure mode rather than its
 feature: the insertion is silent, happens mid-flow while switching between
 Korean and English, and only surfaces later in the text, which makes it very
-hard to attribute to the right cause.
+hard to attribute to the right cause. The rest rewrite characters that were
+typed deliberately, which is wrong anywhere the text is read back literally.
 
 Applications read these defaults when they launch, so already-running apps keep
 the old behavior until restarted. `setup-input-sources.sh` applies this module

@@ -164,10 +164,19 @@ cmp -s "$KEYS_KO_EN_PLIST" "$keys_target"
 # A bare function key carries the function modifier mask; without it macOS
 # never fires the shortcut.
 grep -qx 'true 79 8388608' "$TEST_ROOT/state/hotkey-60"
-# Period substitution inserts a character that was never typed, so the setup
-# turns it off explicitly rather than inheriting the machine default.
+# Text substitutions rewrite what was typed, so the setup turns each one off
+# explicitly rather than inheriting the machine default.
 printf '%s\n' "$first_run_output" | grep -q 'set double-space period substitution off'
-grep -qx '0' "$TEST_ROOT/state/period-substitution"
+printf '%s\n' "$first_run_output" | grep -q 'set automatic capitalization off'
+printf '%s\n' "$first_run_output" | grep -q 'set smart quote substitution off'
+printf '%s\n' "$first_run_output" | grep -q 'set smart dash substitution off'
+for text_input_key in \
+  NSAutomaticPeriodSubstitutionEnabled \
+  NSAutomaticCapitalizationEnabled \
+  NSAutomaticQuoteSubstitutionEnabled \
+  NSAutomaticDashSubstitutionEnabled; do
+  grep -qx '0' "$TEST_ROOT/state/global-$text_input_key"
+done
 
 second_run_output="$(run_isolated_bootstrap)"
 printf '%s\n' "$second_run_output" | grep -q 'unchanged:.*\.bashrc'
@@ -177,6 +186,9 @@ printf '%s\n' "$second_run_output" | grep -q 'unchanged: native previous-input-s
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: LaunchAgent is loaded: dev.undervars.dotfiles.input-source-keys'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: right Command -> F18$'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: double-space period substitution off'
+printf '%s\n' "$second_run_output" | grep -q 'unchanged: automatic capitalization off'
+printf '%s\n' "$second_run_output" | grep -q 'unchanged: smart quote substitution off'
+printf '%s\n' "$second_run_output" | grep -q 'unchanged: smart dash substitution off'
 
 # Switching a machine up to three languages installs the helper and hands the
 # native shortcut back to macOS.
