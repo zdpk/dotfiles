@@ -10,11 +10,13 @@ source "$DOTFILES_ROOT/lib/common.sh"
 
 usage() {
   cat <<'EOF'
-Usage: ./bootstrap.sh [--dry-run]
+Usage: ./bootstrap.sh [--dry-run] [--mode <input-mode>]
 
 Options:
-  --dry-run  Report changes without writing them.
-  -h, --help Show this help.
+  --dry-run       Report changes without writing them.
+  --mode <mode>   macOS input mode: ko-en (default) or ko-en-ja.
+                  DOTFILES_INPUT_MODE sets the same value.
+  -h, --help      Show this help.
 EOF
 }
 
@@ -24,6 +26,14 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --dry-run)
       DOTFILES_DRY_RUN=1
+      ;;
+    --mode=*)
+      DOTFILES_INPUT_MODE="${1#*=}"
+      ;;
+    --mode)
+      shift
+      [ "$#" -gt 0 ] || die "--mode requires a value"
+      DOTFILES_INPUT_MODE="$1"
       ;;
     -h | --help)
       usage
@@ -36,7 +46,10 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
+DOTFILES_INPUT_MODE="$(resolve_input_mode)"
+
 export DOTFILES_DRY_RUN
+export DOTFILES_INPUT_MODE
 
 detect_platform() {
   case "$(uname -s)" in

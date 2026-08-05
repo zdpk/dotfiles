@@ -17,6 +17,23 @@ is_dry_run() {
   [ "${DOTFILES_DRY_RUN:-0}" = "1" ]
 }
 
+# Input modes decide which language keys the macOS module owns. The default is
+# the two-language layout; the three-language layout is opt-in per machine.
+DOTFILES_INPUT_MODE_DEFAULT=ko-en
+
+resolve_input_mode() {
+  local mode="${DOTFILES_INPUT_MODE:-$DOTFILES_INPUT_MODE_DEFAULT}"
+
+  case "$mode" in
+    ko-en | ko-en-ja)
+      printf '%s\n' "$mode"
+      ;;
+    *)
+      die "unknown input mode: $mode (expected ko-en or ko-en-ja)"
+      ;;
+  esac
+}
+
 require_command() {
   local command_path="$1"
   [ -x "$command_path" ] || die "required command is unavailable: $command_path"
