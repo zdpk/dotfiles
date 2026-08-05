@@ -47,6 +47,8 @@ SYMBOLIC_HOTKEYS_DOMAIN=com.apple.symbolichotkeys
 PREVIOUS_SOURCE_HOTKEY_ID=60
 F18_KEY_CODE=79
 SPACE_KEY_CODE=49
+NO_MODIFIER=0
+CONTROL_MODIFIER=262144
 HOTKEY_F18_VALUE='{enabled=1;value={type=standard;parameters=(65535,79,0);};}'
 HOTKEY_STOCK_VALUE='{enabled=0;value={type=standard;parameters=(32,49,262144);};}'
 
@@ -259,18 +261,21 @@ symbolic_hotkey_field() {
     "$export_path" 2>/dev/null || true
 }
 
-# defaults stores `enabled` as an integer once written and as a boolean when
-# macOS wrote it, so both spellings are normalised before comparison.
+# The modifier mask is compared too. Without it an entry left over from an
+# earlier revision, bound to the right key but the wrong mask, would read as
+# already correct and never be repaired.
 symbolic_hotkey_matches() {
   local want_enabled="$1"
   local want_key_code="$2"
+  local want_modifiers="$3"
   local export_path
   local status=1
 
   export_path="$(mktemp "${TMPDIR:-/tmp}/dotfiles-symbolichotkeys.XXXXXX")"
   if "$DEFAULTS" export "$SYMBOLIC_HOTKEYS_DOMAIN" - >"$export_path" 2>/dev/null; then
     if [ "$(normalize_boolean "$(symbolic_hotkey_field "$export_path" enabled)")" = "$want_enabled" ] \
-      && [ "$(symbolic_hotkey_field "$export_path" 'value:parameters:1')" = "$want_key_code" ]; then
+      && [ "$(symbolic_hotkey_field "$export_path" 'value:parameters:1')" = "$want_key_code" ] \
+      && [ "$(symbolic_hotkey_field "$export_path" 'value:parameters:2')" = "$want_modifiers" ]; then
       status=0
     fi
   fi
@@ -282,10 +287,11 @@ symbolic_hotkey_matches() {
 apply_symbolic_hotkey() {
   local want_enabled="$1"
   local want_key_code="$2"
-  local value="$3"
-  local description="$4"
+  local want_modifiers="$3"
+  local value="$4"
+  local description="$5"
 
-  if symbolic_hotkey_matches "$want_enabled" "$want_key_code"; then
+  if symbolic_hotkey_matches "$want_enabled" "$want_key_code" "$want_modifiers"; then
     log "unchanged: $description"
     return 0
   fi
@@ -299,7 +305,7 @@ apply_symbolic_hotkey() {
     return 0
   fi
 
-  if ! symbolic_hotkey_matches "$want_enabled" "$want_key_code"; then
+  if ! symbolic_hotkey_matches "$want_enabled" "$want_key_code" "$want_modifiers"; then
     die "the input-source hotkey did not persist"
   fi
   log "applied $description"
@@ -360,13 +366,15 @@ case "$INPUT_MODE" in
     # shortcut is an exact Korean/English toggle.
     apply_input_sources
     remove_switcher_artifacts
-    apply_symbolic_hotkey true "$F18_KEY_CODE" "$HOTKEY_F18_VALUE" \
+    apply_symbolic_hotkey true "$F18_KEY_CODE" "$NO_MODIFIER" \
+      "$HOTKEY_F18_VALUE" \
       "native previous-input-source hotkey bound to F18"
     install_launch_agent "$KEYS_LABEL" "$KEYS_PLIST_SOURCE" "$KEYS_PLIST_TARGET"
     apply_mapping
     ;;
   ko-en-ja)
-    apply_symbolic_hotkey false "$SPACE_KEY_CODE" "$HOTKEY_STOCK_VALUE" \
+    apply_symbolic_hotkey false "$SPACE_KEY_CODE" "$CONTROL_MODIFIER" \
+      "$HOTKEY_STOCK_VALUE" \
       "native previous-input-source hotkey disabled"
     apply_input_sources
     install_switcher_binary

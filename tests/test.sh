@@ -160,6 +160,7 @@ grep -qx 'ko-en' "$TEST_ROOT/state/applied-sources"
 test ! -e "$switcher_target"
 test ! -e "$switcher_binary"
 cmp -s "$KEYS_KO_EN_PLIST" "$keys_target"
+grep -qx 'true 79 0' "$TEST_ROOT/state/hotkey-60"
 
 second_run_output="$(run_isolated_bootstrap)"
 printf '%s\n' "$second_run_output" | grep -q 'unchanged:.*\.bashrc'
@@ -179,6 +180,7 @@ printf '%s\n' "$ja_run_output" | grep -q 'installed:.*input-source-switcher'
 printf '%s\n' "$ja_run_output" | grep -q 'loaded LaunchAgent: dev.undervars.dotfiles.input-source-switcher'
 printf '%s\n' "$ja_run_output" | grep -q 'applied right Command -> F18, right Option -> F19'
 grep -qx 'ko-en-ja' "$TEST_ROOT/state/applied-sources"
+grep -qx 'false 49 262144' "$TEST_ROOT/state/hotkey-60"
 test -e "$switcher_target"
 test -x "$switcher_binary"
 cmp -s "$KEYS_KO_EN_JA_PLIST" "$keys_target"
@@ -194,6 +196,13 @@ grep -qx 'ko-en' "$TEST_ROOT/state/applied-sources"
 test ! -e "$switcher_target"
 test ! -e "$switcher_binary"
 cmp -s "$KEYS_KO_EN_PLIST" "$keys_target"
+
+# An entry left bound to the right key but the wrong modifier mask must be
+# repaired rather than read as already correct.
+printf '%s\n' 'true 79 262144' >"$TEST_ROOT/state/hotkey-60"
+stale_run_output="$(run_isolated_bootstrap)"
+printf '%s\n' "$stale_run_output" | grep -q 'applied native previous-input-source hotkey bound to F18'
+grep -qx 'true 79 0' "$TEST_ROOT/state/hotkey-60"
 
 test ! -e "$TEST_ROOT/home/Library/LaunchAgents/dev.undervars.dotfiles.input-source-cycle.plist"
 test -L "$TEST_ROOT/home/.bashrc"

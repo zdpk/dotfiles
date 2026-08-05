@@ -10,9 +10,10 @@ HOTKEY_STATE="$DOTFILES_TEST_STATE/hotkey-60"
 print_symbolic_hotkeys() {
   local enabled=false
   local key_code=49
+  local modifiers=262144
 
   if [ -f "$HOTKEY_STATE" ]; then
-    read -r enabled key_code <"$HOTKEY_STATE"
+    read -r enabled key_code modifiers <"$HOTKEY_STATE"
   fi
 
   cat <<EOF
@@ -32,7 +33,7 @@ print_symbolic_hotkeys() {
         <array>
           <integer>65535</integer>
           <integer>$key_code</integer>
-          <integer>0</integer>
+          <integer>$modifiers</integer>
         </array>
         <key>type</key>
         <string>standard</string>
@@ -47,7 +48,6 @@ EOF
 record_symbolic_hotkey() {
   local value="$1"
   local parameters
-  local key_code
   local enabled
 
   case "$value" in
@@ -65,9 +65,12 @@ record_symbolic_hotkey() {
 
   parameters="${value#*parameters=(}"
   parameters="${parameters%%)*}"
-  key_code="$(printf '%s\n' "$parameters" | cut -d, -f2)"
 
-  printf '%s %s\n' "$enabled" "$key_code" >"$HOTKEY_STATE"
+  printf '%s %s %s\n' \
+    "$enabled" \
+    "$(printf '%s\n' "$parameters" | cut -d, -f2)" \
+    "$(printf '%s\n' "$parameters" | cut -d, -f3)" \
+    >"$HOTKEY_STATE"
 }
 
 case "${1:-}:${2:-}:${3:-}" in
