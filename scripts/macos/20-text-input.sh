@@ -74,5 +74,9 @@ apply_boolean_default NSAutomaticDashSubstitutionEnabled false \
   'smart dash substitution off'
 apply_boolean_default NSAutomaticSpellingCorrectionEnabled false \
   'automatic spelling correction off'
+# WebKit keeps its own copy of the spelling preference, so text fields inside
+# web views ignore the AppKit one.
+apply_boolean_default WebAutomaticSpellingCorrectionEnabled false \
+  'web view spelling correction off'
 
 log 'text input defaults applied; applications read them when next launched'

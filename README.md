@@ -67,6 +67,35 @@ because physical right Command is no longer a Command modifier.
 Switching modes is safe in either direction: each mode removes the other's
 artifacts before installing its own.
 
+### What this rests on
+
+Most of the mechanism is documented by Apple, but not all of it, which matters
+when a macOS release breaks something.
+
+The HID usage values come from [Technical Note TN2450][tn2450]: Right GUI
+`0xE7`, Right Alt `0xE6`, F18 `0x6D`, F19 `0x6E`, each or'd with `0x700000000`.
+The same note states that remappings are "lost when the system is restarted",
+which is why the mapping needs a LaunchAgent at all; Apple documents no way to
+make them persistent, so the LaunchAgent is this repository's answer rather
+than a documented one.
+
+The input-source handling follows `TextInputSources.h`. Exactly one keyboard
+source is selected at a time and selecting a new one deselects the previous,
+while zero or more palette sources may be selected — which is why only the
+keyboard category is owned. An input mode can only be enabled once its parent
+input method is enabled, which is why each mode is listed after its parent in
+the declared set and enabled in that order.
+
+`com.apple.symbolichotkeys` is **not documented by Apple**. The entry format,
+the meaning of hotkey `60`, and the function modifier flag `0x800000` were all
+determined by reading what macOS writes for its own shortcuts. ko-en therefore
+carries a risk that a future macOS changes this format; ko-en-ja does not,
+since it uses documented Carbon and Text Input Source APIs throughout. The
+module re-reads the entry after writing it and fails loudly if it did not
+persist, so a break shows up during setup rather than silently.
+
+[tn2450]: https://developer.apple.com/library/archive/technotes/tn2450/_index.html
+
 ### The input-source list
 
 dotfiles owns the keyboard input-source list the way it owns `UserKeyMapping`.
@@ -135,6 +164,7 @@ the same state:
 | `NSAutomaticQuoteSubstitutionEnabled` | `false` | Curly quotes break code, config, and shell commands |
 | `NSAutomaticDashSubstitutionEnabled` | `false` | En dashes break the same literal text |
 | `NSAutomaticSpellingCorrectionEnabled` | `false` | Autocorrect rewrites identifiers and command names |
+| `WebAutomaticSpellingCorrectionEnabled` | `false` | WebKit keeps a separate copy of the same preference |
 
 Period substitution is worth turning off for its failure mode rather than its
 feature: the insertion is silent, happens mid-flow while switching between

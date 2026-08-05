@@ -142,6 +142,7 @@ text_input_keys=(
   NSAutomaticQuoteSubstitutionEnabled
   NSAutomaticDashSubstitutionEnabled
   NSAutomaticSpellingCorrectionEnabled
+  WebAutomaticSpellingCorrectionEnabled
 )
 
 assert_text_input_defaults_off() {
@@ -187,6 +188,7 @@ printf '%s\n' "$first_run_output" | grep -q 'set automatic capitalization off'
 printf '%s\n' "$first_run_output" | grep -q 'set smart quote substitution off'
 printf '%s\n' "$first_run_output" | grep -q 'set smart dash substitution off'
 printf '%s\n' "$first_run_output" | grep -q 'set automatic spelling correction off'
+printf '%s\n' "$first_run_output" | grep -q 'set web view spelling correction off'
 assert_text_input_defaults_off
 
 second_run_output="$(run_isolated_bootstrap)"

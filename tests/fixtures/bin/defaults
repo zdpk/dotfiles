@@ -80,11 +80,11 @@ record_symbolic_hotkey() {
 case "${1:-}:${2:-}:${3:-}" in
   # Absent state stands in for a fresh machine, where the key is either unset
   # or left at the macOS default of on.
-  read:-g:NSAutomatic*)
+  read:-g:*Automatic*)
     [ -f "$DOTFILES_TEST_STATE/global-$3" ] || exit 1
     cat "$DOTFILES_TEST_STATE/global-$3"
     ;;
-  write:-g:NSAutomatic*)
+  write:-g:*Automatic*)
     [ "${4:-}" = "-bool" ]
     case "${5:-}" in
       true)
