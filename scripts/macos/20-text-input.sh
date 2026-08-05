@@ -72,5 +72,7 @@ apply_boolean_default NSAutomaticQuoteSubstitutionEnabled false \
   'smart quote substitution off'
 apply_boolean_default NSAutomaticDashSubstitutionEnabled false \
   'smart dash substitution off'
+apply_boolean_default NSAutomaticSpellingCorrectionEnabled false \
+  'automatic spelling correction off'
 
 log 'text input defaults applied; applications read them when next launched'

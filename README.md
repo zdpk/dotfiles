@@ -134,12 +134,23 @@ the same state:
 | `NSAutomaticCapitalizationEnabled` | `false` | Capitalises identifiers meant to stay lowercase |
 | `NSAutomaticQuoteSubstitutionEnabled` | `false` | Curly quotes break code, config, and shell commands |
 | `NSAutomaticDashSubstitutionEnabled` | `false` | En dashes break the same literal text |
+| `NSAutomaticSpellingCorrectionEnabled` | `false` | Autocorrect rewrites identifiers and command names |
 
 Period substitution is worth turning off for its failure mode rather than its
 feature: the insertion is silent, happens mid-flow while switching between
 Korean and English, and only surfaces later in the text, which makes it very
 hard to attribute to the right cause. The rest rewrite characters that were
 typed deliberately, which is wrong anywhere the text is read back literally.
+
+Each value is written whether or not the key already exists, so a fresh VM that
+has never had the key set is configured the same as a machine where someone
+turned the feature back on in System Settings. Every run re-asserts all of them,
+which is what makes the state hold rather than drift.
+
+These survive a reboot without any further help. `defaults` values live in
+`~/Library/Preferences/.GlobalPreferences.plist` on disk, unlike the `hidutil`
+mapping, which is kernel runtime state and is why that one needs a LaunchAgent
+to reapply it at every login.
 
 Applications read these defaults when they launch, so already-running apps keep
 the old behavior until restarted. `setup-input-sources.sh` applies this module

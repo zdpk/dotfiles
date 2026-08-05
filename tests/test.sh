@@ -136,6 +136,22 @@ run_isolated_bootstrap() {
     "$ROOT/bootstrap.sh" "$@" 2>&1
 }
 
+text_input_keys=(
+  NSAutomaticPeriodSubstitutionEnabled
+  NSAutomaticCapitalizationEnabled
+  NSAutomaticQuoteSubstitutionEnabled
+  NSAutomaticDashSubstitutionEnabled
+  NSAutomaticSpellingCorrectionEnabled
+)
+
+assert_text_input_defaults_off() {
+  local key
+
+  for key in "${text_input_keys[@]}"; do
+    grep -qx '0' "$TEST_ROOT/state/global-$key"
+  done
+}
+
 switcher_target="$TEST_ROOT/home/Library/LaunchAgents/dev.undervars.dotfiles.input-source-switcher.plist"
 keys_target="$TEST_ROOT/home/Library/LaunchAgents/dev.undervars.dotfiles.input-source-keys.plist"
 switcher_binary="$TEST_ROOT/home/Library/Application Support/dev.undervars.dotfiles/bin/input-source-switcher"
@@ -170,13 +186,8 @@ printf '%s\n' "$first_run_output" | grep -q 'set double-space period substitutio
 printf '%s\n' "$first_run_output" | grep -q 'set automatic capitalization off'
 printf '%s\n' "$first_run_output" | grep -q 'set smart quote substitution off'
 printf '%s\n' "$first_run_output" | grep -q 'set smart dash substitution off'
-for text_input_key in \
-  NSAutomaticPeriodSubstitutionEnabled \
-  NSAutomaticCapitalizationEnabled \
-  NSAutomaticQuoteSubstitutionEnabled \
-  NSAutomaticDashSubstitutionEnabled; do
-  grep -qx '0' "$TEST_ROOT/state/global-$text_input_key"
-done
+printf '%s\n' "$first_run_output" | grep -q 'set automatic spelling correction off'
+assert_text_input_defaults_off
 
 second_run_output="$(run_isolated_bootstrap)"
 printf '%s\n' "$second_run_output" | grep -q 'unchanged:.*\.bashrc'
@@ -189,6 +200,7 @@ printf '%s\n' "$second_run_output" | grep -q 'unchanged: double-space period sub
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: automatic capitalization off'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: smart quote substitution off'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: smart dash substitution off'
+printf '%s\n' "$second_run_output" | grep -q 'unchanged: automatic spelling correction off'
 
 # Switching a machine up to three languages installs the helper and hands the
 # native shortcut back to macOS.
@@ -216,6 +228,28 @@ grep -qx 'ko-en' "$TEST_ROOT/state/applied-sources"
 test ! -e "$switcher_target"
 test ! -e "$switcher_binary"
 cmp -s "$KEYS_KO_EN_PLIST" "$keys_target"
+
+# Every apply re-asserts the typing defaults, so a machine where someone turned
+# one back on in System Settings is repaired rather than left alone.
+for text_input_key in "${text_input_keys[@]}"; do
+  printf '%s\n' '1' >"$TEST_ROOT/state/global-$text_input_key"
+done
+drift_run_output="$(run_isolated_bootstrap)"
+printf '%s\n' "$drift_run_output" | grep -q 'set double-space period substitution off'
+printf '%s\n' "$drift_run_output" | grep -q 'set automatic capitalization off'
+printf '%s\n' "$drift_run_output" | grep -q 'set smart quote substitution off'
+printf '%s\n' "$drift_run_output" | grep -q 'set smart dash substitution off'
+printf '%s\n' "$drift_run_output" | grep -q 'set automatic spelling correction off'
+assert_text_input_defaults_off
+
+# A machine where the keys were never set at all — a fresh VM — must get all of
+# them written rather than skipped for lack of a current value.
+for text_input_key in "${text_input_keys[@]}"; do
+  rm -f "$TEST_ROOT/state/global-$text_input_key"
+done
+fresh_run_output="$(run_isolated_bootstrap)"
+printf '%s\n' "$fresh_run_output" | grep -q 'set automatic spelling correction off'
+assert_text_input_defaults_off
 
 # An entry left bound to the right key but the wrong modifier mask must be
 # repaired rather than read as already correct.
