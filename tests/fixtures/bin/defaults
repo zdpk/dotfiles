@@ -4,31 +4,80 @@ set -euo pipefail
 
 : "${DOTFILES_TEST_STATE:?}"
 
-case "${1:-}:${2:-}:${3:-}" in
-  read:com.apple.HIToolbox:AppleEnabledInputSources)
-    cat <<'EOF'
-(
-    {
-        InputSourceKind = "Keyboard Layout";
-        "KeyboardLayout Name" = ABC;
-    },
-    {
-        "Input Mode" = "com.apple.inputmethod.Korean.2SetKorean";
-    },
-    {
-        "Input Mode" = "com.apple.inputmethod.Japanese";
-    }
-)
+HOTKEY_STATE="$DOTFILES_TEST_STATE/hotkey-60"
+
+# The stock macOS state is a disabled shortcut still bound to Control-Space.
+print_symbolic_hotkeys() {
+  local enabled=false
+  local key_code=49
+
+  if [ -f "$HOTKEY_STATE" ]; then
+    read -r enabled key_code <"$HOTKEY_STATE"
+  fi
+
+  cat <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>AppleSymbolicHotKeys</key>
+  <dict>
+    <key>60</key>
+    <dict>
+      <key>enabled</key>
+      <$enabled/>
+      <key>value</key>
+      <dict>
+        <key>parameters</key>
+        <array>
+          <integer>65535</integer>
+          <integer>$key_code</integer>
+          <integer>0</integer>
+        </array>
+        <key>type</key>
+        <string>standard</string>
+      </dict>
+    </dict>
+  </dict>
+</dict>
+</plist>
 EOF
+}
+
+record_symbolic_hotkey() {
+  local value="$1"
+  local parameters
+  local key_code
+  local enabled
+
+  case "$value" in
+    *enabled=1*)
+      enabled=true
+      ;;
+    *enabled=0*)
+      enabled=false
+      ;;
+    *)
+      printf 'unexpected hotkey value: %s\n' "$value" >&2
+      exit 2
+      ;;
+  esac
+
+  parameters="${value#*parameters=(}"
+  parameters="${parameters%%)*}"
+  key_code="$(printf '%s\n' "$parameters" | cut -d, -f2)"
+
+  printf '%s %s\n' "$enabled" "$key_code" >"$HOTKEY_STATE"
+}
+
+case "${1:-}:${2:-}:${3:-}" in
+  export:com.apple.symbolichotkeys:-)
+    print_symbolic_hotkeys
     ;;
-  read:com.apple.HIToolbox:AppleFnUsageType)
-    [ -f "$DOTFILES_TEST_STATE/fn-usage" ] || exit 1
-    cat "$DOTFILES_TEST_STATE/fn-usage"
-    ;;
-  write:com.apple.HIToolbox:AppleFnUsageType)
-    [ "${4:-}" = "-int" ]
-    [ "${5:-}" = "1" ]
-    printf '%s\n' '1' >"$DOTFILES_TEST_STATE/fn-usage"
+  write:com.apple.symbolichotkeys:AppleSymbolicHotKeys)
+    [ "${4:-}" = "-dict-add" ]
+    [ "${5:-}" = "60" ]
+    record_symbolic_hotkey "${6:-}"
     ;;
   *)
     printf 'unexpected defaults invocation: %s\n' "$*" >&2

@@ -4,32 +4,39 @@ set -euo pipefail
 
 : "${DOTFILES_TEST_STATE:?}"
 
+MAPPING_STATE="$DOTFILES_TEST_STATE/mapping"
+
+# The readback mirrors whichever mapping was last set, so ko-en (one entry) and
+# ko-en-ja (two entries) both round-trip through the idempotency check.
 if [ "${1:-}" = "property" ] && [ "${2:-}" = "--get" ] && [ "${3:-}" = "UserKeyMapping" ]; then
-  if [ -f "$DOTFILES_TEST_STATE/mapping" ]; then
-    cat <<'EOF'
-(
-    {
-        HIDKeyboardModifierMappingDst = 30064771181;
-        HIDKeyboardModifierMappingSrc = 30064771303;
-    },
-    {
-        HIDKeyboardModifierMappingDst = 30064771182;
-        HIDKeyboardModifierMappingSrc = 30064771302;
-    }
-)
-EOF
-  else
+  if [ ! -f "$MAPPING_STATE" ]; then
     printf '%s\n' '(null)'
+    exit 0
   fi
+
+  printf '%s\n' '('
+  if grep -q '0x7000000E7' "$MAPPING_STATE"; then
+    printf '%s\n' \
+      '    {' \
+      '        HIDKeyboardModifierMappingDst = 30064771181;' \
+      '        HIDKeyboardModifierMappingSrc = 30064771303;' \
+      '    },'
+  fi
+  if grep -q '0x7000000E6' "$MAPPING_STATE"; then
+    printf '%s\n' \
+      '    {' \
+      '        HIDKeyboardModifierMappingDst = 30064771182;' \
+      '        HIDKeyboardModifierMappingSrc = 30064771302;' \
+      '    },'
+  fi
+  printf '%s\n' ')'
   exit 0
 fi
 
 if [ "${1:-}" = "property" ] && [ "${2:-}" = "--set" ]; then
   printf '%s\n' "${3:-}" | grep -q '0x7000000E7'
   printf '%s\n' "${3:-}" | grep -q '0x70000006D'
-  printf '%s\n' "${3:-}" | grep -q '0x7000000E6'
-  printf '%s\n' "${3:-}" | grep -q '0x70000006E'
-  : >"$DOTFILES_TEST_STATE/mapping"
+  printf '%s\n' "${3:-}" >"$MAPPING_STATE"
   exit 0
 fi
 

@@ -7,6 +7,7 @@ set -euo pipefail
 # shellcheck source=../../lib/common.sh
 source "$DOTFILES_ROOT/lib/common.sh"
 
+ACTIVATE_SETTINGS="${DOTFILES_ACTIVATE_SETTINGS:-/System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings}"
 DEFAULTS="${DOTFILES_DEFAULTS:-/usr/bin/defaults}"
 HIDUTIL="${DOTFILES_HIDUTIL:-/usr/bin/hidutil}"
 ID="${DOTFILES_ID:-/usr/bin/id}"
@@ -17,10 +18,12 @@ PGREP="${DOTFILES_PGREP:-/usr/bin/pgrep}"
 XCRUN="${DOTFILES_XCRUN:-/usr/bin/xcrun}"
 HOME_DIR="${DOTFILES_HOME:-$HOME}"
 
+INPUT_MODE="$(resolve_input_mode)"
+
 KEYS_LABEL=dev.undervars.dotfiles.input-source-keys
 SWITCHER_LABEL=dev.undervars.dotfiles.input-source-switcher
 LEGACY_CYCLE_LABEL=dev.undervars.dotfiles.input-source-cycle
-KEYS_PLIST_SOURCE="$DOTFILES_ROOT/config/macos/LaunchAgents/$KEYS_LABEL.plist"
+KEYS_PLIST_SOURCE="$DOTFILES_ROOT/config/macos/LaunchAgents/$KEYS_LABEL.$INPUT_MODE.plist"
 SWITCHER_PLIST_SOURCE="$DOTFILES_ROOT/config/macos/LaunchAgents/$SWITCHER_LABEL.plist"
 KEYS_PLIST_TARGET="$HOME_DIR/Library/LaunchAgents/$KEYS_LABEL.plist"
 SWITCHER_PLIST_TARGET="$HOME_DIR/Library/LaunchAgents/$SWITCHER_LABEL.plist"
@@ -34,6 +37,31 @@ RIGHT_OPTION_DECIMAL=30064771302
 F18_DECIMAL=30064771181
 F19_DECIMAL=30064771182
 
+# Set by resolve_tool_binary; ko-en runs it in place, ko-en-ja installs it.
+TOOL_BINARY=""
+
+# "Select the previous input source" in System Settings > Keyboard Shortcuts.
+# In ko-en mode this native shortcut replaces the Swift helper: hidutil turns
+# right Command into F18 and macOS performs the switch itself.
+SYMBOLIC_HOTKEYS_DOMAIN=com.apple.symbolichotkeys
+PREVIOUS_SOURCE_HOTKEY_ID=60
+F18_KEY_CODE=79
+SPACE_KEY_CODE=49
+HOTKEY_F18_VALUE='{enabled=1;value={type=standard;parameters=(65535,79,0);};}'
+HOTKEY_STOCK_VALUE='{enabled=0;value={type=standard;parameters=(32,49,262144);};}'
+
+case "$INPUT_MODE" in
+  ko-en)
+    MAPPING_DESCRIPTION='right Command -> F18'
+    EXPECTED_MAPPING_ENTRIES=1
+    ;;
+  ko-en-ja)
+    MAPPING_DESCRIPTION='right Command -> F18, right Option -> F19'
+    EXPECTED_MAPPING_ENTRIES=2
+    ;;
+esac
+
+require_command "$ACTIVATE_SETTINGS"
 require_command "$DEFAULTS"
 require_command "$HIDUTIL"
 require_command "$ID"
@@ -69,87 +97,108 @@ check_remapper_conflicts() {
   fi
 }
 
-check_input_sources() {
-  local sources
-  local missing=0
+# Both modes drive the input-source list through the same Swift tool. ko-en runs
+# it straight from the build directory and never installs it, so that mode still
+# leaves no resident process behind.
+resolve_tool_binary() {
+  local bin_dir
 
-  sources="$("$DEFAULTS" read com.apple.HIToolbox AppleEnabledInputSources 2>/dev/null || true)"
-  for source_id in \
-    'KeyboardLayout Name.*ABC' \
-    'com.apple.inputmethod.Korean.2SetKorean' \
-    'com.apple.inputmethod.Japanese'; do
-    if ! printf '%s\n' "$sources" | grep -q "$source_id"; then
-      warn "required input source is not enabled: $source_id"
-      missing=1
-    fi
-  done
-
-  if [ "$missing" -eq 1 ] && ! is_dry_run; then
-    die "enable ABC, Korean 2-Set, and Japanese before applying this module"
+  if [ -n "${DOTFILES_SWITCHER_BINARY_SOURCE:-}" ]; then
+    TOOL_BINARY="$DOTFILES_SWITCHER_BINARY_SOURCE"
+    return 0
   fi
-  if [ "$missing" -eq 0 ]; then
-    log "input sources verified: ABC, Korean 2-Set, Japanese"
+
+  require_command "$XCRUN"
+  "$XCRUN" swift build \
+    --package-path "$PACKAGE_DIR" \
+    --configuration release \
+    --product input-source-switcher
+  bin_dir="$("$XCRUN" swift build \
+    --package-path "$PACKAGE_DIR" \
+    --configuration release \
+    --show-bin-path)"
+  TOOL_BINARY="$bin_dir/input-source-switcher"
+}
+
+# dotfiles owns the keyboard input-source list the way it owns UserKeyMapping:
+# the mode declares the set, and anything else enabled is removed. Palette
+# sources such as the character viewer are a different category and survive.
+apply_input_sources() {
+  local disabled
+
+  if is_dry_run; then
+    log "would build release input-source-switcher"
+    log "would apply input sources for mode: $INPUT_MODE"
+    return 0
+  fi
+
+  resolve_tool_binary
+  disabled="$("$TOOL_BINARY" --apply-sources "$INPUT_MODE" | grep '^disabled=' || true)"
+
+  if [ -n "$disabled" ]; then
+    printf '%s\n' "$disabled" | while IFS= read -r line; do
+      log "disabled input source: ${line#disabled=}"
+    done
+  fi
+
+  log "input sources applied for mode: $INPUT_MODE"
+}
+
+remove_launch_agent() {
+  local label="$1"
+  local plist_path="$2"
+  local domain
+
+  domain="gui/$("$ID" -u)"
+
+  if is_dry_run; then
+    if [ -e "$plist_path" ] || "$LAUNCHCTL" print "$domain/$label" >/dev/null 2>&1; then
+      log "would remove LaunchAgent: $label"
+    fi
+    return 0
+  fi
+
+  if "$LAUNCHCTL" print "$domain/$label" >/dev/null 2>&1; then
+    "$LAUNCHCTL" bootout "$domain/$label"
+    log "unloaded LaunchAgent: $label"
+  fi
+  if [ -e "$plist_path" ]; then
+    rm -f "$plist_path"
+    log "removed: $plist_path"
   fi
 }
 
 remove_legacy_cycle_agent() {
-  local domain="gui/$("$ID" -u)"
+  remove_launch_agent "$LEGACY_CYCLE_LABEL" "$LEGACY_CYCLE_PLIST"
+}
 
-  if is_dry_run; then
-    if [ -e "$LEGACY_CYCLE_PLIST" ] || "$LAUNCHCTL" print "$domain/$LEGACY_CYCLE_LABEL" >/dev/null 2>&1; then
-      log "would remove legacy input-source cycle LaunchAgent"
-    fi
+# Leaving the helper resident in ko-en mode would double-handle F18, so the
+# three-language artifacts are removed rather than merely left unloaded.
+remove_switcher_artifacts() {
+  remove_launch_agent "$SWITCHER_LABEL" "$SWITCHER_PLIST_TARGET"
+
+  if [ ! -e "$SWITCHER_BINARY" ]; then
     return 0
   fi
 
-  if "$LAUNCHCTL" print "$domain/$LEGACY_CYCLE_LABEL" >/dev/null 2>&1; then
-    "$LAUNCHCTL" bootout "$domain/$LEGACY_CYCLE_LABEL"
-    log "unloaded legacy LaunchAgent: $LEGACY_CYCLE_LABEL"
+  if is_dry_run; then
+    log "would remove: $SWITCHER_BINARY"
+    return 0
   fi
-  if [ -e "$LEGACY_CYCLE_PLIST" ]; then
-    rm -f "$LEGACY_CYCLE_PLIST"
-    log "removed: $LEGACY_CYCLE_PLIST"
-  fi
-}
 
-package_needs_build() {
-  [ ! -x "$SWITCHER_BINARY" ] && return 0
-  find "$PACKAGE_DIR" -type f \
-    \( -name '*.swift' -o -name 'Package.swift' \) \
-    -newer "$SWITCHER_BINARY" -print -quit | grep -q .
+  rm -f "$SWITCHER_BINARY"
+  log "removed: $SWITCHER_BINARY"
 }
 
 install_switcher_binary() {
-  local binary_source="${DOTFILES_SWITCHER_BINARY_SOURCE:-}"
-  local bin_dir
-
-  if [ -z "$binary_source" ] && package_needs_build; then
-    require_command "$XCRUN"
-    if is_dry_run; then
-      log "would build release input-source-switcher"
-      log "would install: $SWITCHER_BINARY"
-      DOTFILES_FILE_CHANGED=1
-      return 0
-    fi
-    "$XCRUN" swift build \
-      --package-path "$PACKAGE_DIR" \
-      --configuration release \
-      --product input-source-switcher
-    bin_dir="$("$XCRUN" swift build \
-      --package-path "$PACKAGE_DIR" \
-      --configuration release \
-      --show-bin-path)"
-    binary_source="$bin_dir/input-source-switcher"
-  elif [ -z "$binary_source" ]; then
-    DOTFILES_FILE_CHANGED=0
-    log "unchanged: $SWITCHER_BINARY"
+  if is_dry_run; then
+    log "would install: $SWITCHER_BINARY"
+    DOTFILES_FILE_CHANGED=1
     return 0
   fi
 
-  install_file_if_changed "$binary_source" "$SWITCHER_BINARY" 0755
-  if ! is_dry_run; then
-    "$SWITCHER_BINARY" --check >/dev/null
-  fi
+  install_file_if_changed "$TOOL_BINARY" "$SWITCHER_BINARY" 0755
+  "$SWITCHER_BINARY" --check "$INPUT_MODE" >/dev/null
 }
 
 install_launch_agent() {
@@ -187,6 +236,75 @@ install_launch_agent() {
   fi
 }
 
+normalize_boolean() {
+  case "$1" in
+    1 | true)
+      printf '%s\n' 'true'
+      ;;
+    0 | false)
+      printf '%s\n' 'false'
+      ;;
+    *)
+      printf '%s\n' 'unset'
+      ;;
+  esac
+}
+
+symbolic_hotkey_field() {
+  local export_path="$1"
+  local field="$2"
+
+  "$PLIST_BUDDY" \
+    -c "Print :AppleSymbolicHotKeys:$PREVIOUS_SOURCE_HOTKEY_ID:$field" \
+    "$export_path" 2>/dev/null || true
+}
+
+# defaults stores `enabled` as an integer once written and as a boolean when
+# macOS wrote it, so both spellings are normalised before comparison.
+symbolic_hotkey_matches() {
+  local want_enabled="$1"
+  local want_key_code="$2"
+  local export_path
+  local status=1
+
+  export_path="$(mktemp "${TMPDIR:-/tmp}/dotfiles-symbolichotkeys.XXXXXX")"
+  if "$DEFAULTS" export "$SYMBOLIC_HOTKEYS_DOMAIN" - >"$export_path" 2>/dev/null; then
+    if [ "$(normalize_boolean "$(symbolic_hotkey_field "$export_path" enabled)")" = "$want_enabled" ] \
+      && [ "$(symbolic_hotkey_field "$export_path" 'value:parameters:1')" = "$want_key_code" ]; then
+      status=0
+    fi
+  fi
+
+  rm -f "$export_path"
+  return "$status"
+}
+
+apply_symbolic_hotkey() {
+  local want_enabled="$1"
+  local want_key_code="$2"
+  local value="$3"
+  local description="$4"
+
+  if symbolic_hotkey_matches "$want_enabled" "$want_key_code"; then
+    log "unchanged: $description"
+    return 0
+  fi
+
+  run "$DEFAULTS" write "$SYMBOLIC_HOTKEYS_DOMAIN" AppleSymbolicHotKeys \
+    -dict-add "$PREVIOUS_SOURCE_HOTKEY_ID" "$value"
+  run "$ACTIVATE_SETTINGS" -u
+
+  if is_dry_run; then
+    log "would apply $description"
+    return 0
+  fi
+
+  if ! symbolic_hotkey_matches "$want_enabled" "$want_key_code"; then
+    die "the input-source hotkey did not persist"
+  fi
+  log "applied $description"
+}
+
 mapping_matches() {
   local mapping
   local entry_count
@@ -194,18 +312,27 @@ mapping_matches() {
   mapping="$("$HIDUTIL" property --get UserKeyMapping 2>/dev/null || true)"
   entry_count="$(printf '%s\n' "$mapping" | grep -c 'HIDKeyboardModifierMappingSrc =' || true)"
 
-  [ "$entry_count" -eq 2 ] \
-    && [ "$(printf '%s\n' "$mapping" | grep -c "HIDKeyboardModifierMappingSrc = $RIGHT_COMMAND_DECIMAL;" || true)" -eq 1 ] \
-    && [ "$(printf '%s\n' "$mapping" | grep -c "HIDKeyboardModifierMappingDst = $F18_DECIMAL;" || true)" -eq 1 ] \
-    && [ "$(printf '%s\n' "$mapping" | grep -c "HIDKeyboardModifierMappingSrc = $RIGHT_OPTION_DECIMAL;" || true)" -eq 1 ] \
-    && [ "$(printf '%s\n' "$mapping" | grep -c "HIDKeyboardModifierMappingDst = $F19_DECIMAL;" || true)" -eq 1 ]
+  [ "$entry_count" -eq "$EXPECTED_MAPPING_ENTRIES" ] || return 1
+  printf '%s\n' "$mapping" \
+    | grep -q "HIDKeyboardModifierMappingSrc = $RIGHT_COMMAND_DECIMAL;" || return 1
+  printf '%s\n' "$mapping" \
+    | grep -q "HIDKeyboardModifierMappingDst = $F18_DECIMAL;" || return 1
+
+  if [ "$INPUT_MODE" = "ko-en-ja" ]; then
+    printf '%s\n' "$mapping" \
+      | grep -q "HIDKeyboardModifierMappingSrc = $RIGHT_OPTION_DECIMAL;" || return 1
+    printf '%s\n' "$mapping" \
+      | grep -q "HIDKeyboardModifierMappingDst = $F19_DECIMAL;" || return 1
+  fi
+
+  return 0
 }
 
 apply_mapping() {
   local mapping_json
 
   if mapping_matches; then
-    log "unchanged: right Command -> F18, right Option -> F19"
+    log "unchanged: $MAPPING_DESCRIPTION"
     return 0
   fi
 
@@ -217,21 +344,38 @@ apply_mapping() {
   fi
 
   if is_dry_run; then
-    log "would apply right Command -> F18, right Option -> F19"
+    log "would apply $MAPPING_DESCRIPTION"
   else
-    log "applied right Command -> F18, right Option -> F19"
+    log "applied $MAPPING_DESCRIPTION"
   fi
 }
 
+log "input mode: $INPUT_MODE"
 check_remapper_conflicts
-check_input_sources
 remove_legacy_cycle_agent
-install_switcher_binary
-switcher_binary_changed="$DOTFILES_FILE_CHANGED"
-install_launch_agent \
-  "$SWITCHER_LABEL" \
-  "$SWITCHER_PLIST_SOURCE" \
-  "$SWITCHER_PLIST_TARGET" \
-  "$switcher_binary_changed"
-install_launch_agent "$KEYS_LABEL" "$KEYS_PLIST_SOURCE" "$KEYS_PLIST_TARGET"
-apply_mapping
+
+case "$INPUT_MODE" in
+  ko-en)
+    # Reduce the source list first: with only two sources left, the native
+    # shortcut is an exact Korean/English toggle.
+    apply_input_sources
+    remove_switcher_artifacts
+    apply_symbolic_hotkey true "$F18_KEY_CODE" "$HOTKEY_F18_VALUE" \
+      "native previous-input-source hotkey bound to F18"
+    install_launch_agent "$KEYS_LABEL" "$KEYS_PLIST_SOURCE" "$KEYS_PLIST_TARGET"
+    apply_mapping
+    ;;
+  ko-en-ja)
+    apply_symbolic_hotkey false "$SPACE_KEY_CODE" "$HOTKEY_STOCK_VALUE" \
+      "native previous-input-source hotkey disabled"
+    apply_input_sources
+    install_switcher_binary
+    install_launch_agent \
+      "$SWITCHER_LABEL" \
+      "$SWITCHER_PLIST_SOURCE" \
+      "$SWITCHER_PLIST_TARGET" \
+      "$DOTFILES_FILE_CHANGED"
+    install_launch_agent "$KEYS_LABEL" "$KEYS_PLIST_SOURCE" "$KEYS_PLIST_TARGET"
+    apply_mapping
+    ;;
+esac

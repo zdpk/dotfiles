@@ -2,9 +2,26 @@
 
 set -euo pipefail
 
-if [ "${1:-}" = "--check" ]; then
-  printf '%s\n' 'fixture input sources available'
-  exit 0
-fi
-
-exit 0
+# Records the mode it was asked to apply and reports a leftover keyboard source
+# being removed, so the module's disable reporting stays covered.
+case "${1:-}" in
+  --apply-sources)
+    [ -n "${2:-}" ] || exit 64
+    if [ -n "${DOTFILES_TEST_STATE:-}" ]; then
+      printf '%s\n' "$2" >"$DOTFILES_TEST_STATE/applied-sources"
+      if [ "$2" = "ko-en" ] && [ -f "$DOTFILES_TEST_STATE/extra-source" ]; then
+        printf '%s\n' 'disabled=com.apple.keylayout.Dvorak'
+        rm -f "$DOTFILES_TEST_STATE/extra-source"
+      fi
+    fi
+    printf '%s\n' "mode=$2"
+    ;;
+  --check)
+    printf '%s\n' "mode=${2:-ko-en-ja}"
+    ;;
+  '')
+    ;;
+  *)
+    exit 64
+    ;;
+esac
