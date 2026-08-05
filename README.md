@@ -74,10 +74,18 @@ when a macOS release breaks something.
 
 The HID usage values come from [Technical Note TN2450][tn2450]: Right GUI
 `0xE7`, Right Alt `0xE6`, F18 `0x6D`, F19 `0x6E`, each or'd with `0x700000000`.
-The same note states that remappings are "lost when the system is restarted",
-which is why the mapping needs a LaunchAgent at all; Apple documents no way to
-make them persistent, so the LaunchAgent is this repository's answer rather
-than a documented one.
+The same note states that remappings are "lost when the system is restarted or
+if the keyboard service is removed", which is why the mapping needs a
+LaunchAgent at all; Apple documents no way to make them persistent, so the
+LaunchAgent is this repository's answer rather than a documented one.
+
+That second clause is a real limit. The LaunchAgent runs at login, so a
+keyboard attached later in the session is not covered — reapply with
+`make input-sources` after connecting one. `hidutil` has also regressed across
+releases before: on macOS 14.2 it reported success while silently not applying,
+and needed `sudo`. `apply_mapping` reads the mapping back and fails if it does
+not match, which catches an outright rejection, but not a build that claims
+success and does nothing.
 
 The input-source handling follows `TextInputSources.h`. Exactly one keyboard
 source is selected at a time and selecting a new one deselects the previous,
@@ -86,13 +94,28 @@ keyboard category is owned. An input mode can only be enabled once its parent
 input method is enabled, which is why each mode is listed after its parent in
 the declared set and enabled in that order.
 
-`com.apple.symbolichotkeys` is **not documented by Apple**. The entry format,
-the meaning of hotkey `60`, and the function modifier flag `0x800000` were all
-determined by reading what macOS writes for its own shortcuts. ko-en therefore
-carries a risk that a future macOS changes this format; ko-en-ja does not,
-since it uses documented Carbon and Text Input Source APIs throughout. The
-module re-reads the entry after writing it and fails loudly if it did not
-persist, so a break shows up during setup rather than silently.
+`com.apple.symbolichotkeys` is **not documented by Apple**. The entry format
+and the meaning of hotkey `60` were determined by reading what macOS writes for
+its own shortcuts, corroborated against third-party write-ups; `60` is
+"Select the previous input source", stock shortcut Control-Space, which matches
+the entry this repository replaces.
+
+The `parameters` array is `[character, key code, modifier mask]`. The mask is
+better grounded than the container around it: the values are the documented
+`NSEventModifierFlags` from `NSEvent.h`, so the function flag this setup needs
+is `NSEventModifierFlagFunction`, `1 << 23`, `8388608` — not a magic number.
+A bare function key is stored with that flag set, which is how macOS records
+its own F14 and F15 brightness shortcuts, and the shortcut does not fire
+without it.
+
+Applying the change without a logout needs
+`SystemAdministration.framework/Resources/activateSettings -u`, a private
+binary with no documented alternative.
+
+So ko-en carries a risk that a future macOS changes this format, while
+ko-en-ja does not, since it uses documented Carbon and Text Input Source APIs
+throughout. The module re-reads the entry after writing it and fails loudly if
+it did not persist, so a break shows up during setup rather than silently.
 
 [tn2450]: https://developer.apple.com/library/archive/technotes/tn2450/_index.html
 
