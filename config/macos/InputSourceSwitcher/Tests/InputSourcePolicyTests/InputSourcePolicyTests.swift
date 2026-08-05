@@ -49,6 +49,67 @@ func japaneseMemory() {
     )
 }
 
+@Test("Each mode declares its own source set")
+func declaredSources() {
+    #expect(
+        InputSourcePolicy.requiredSourceIDs(for: .koreanEnglish) == [
+            PrimaryInputSource.english.rawValue,
+            InputSourcePolicy.koreanInputMethodID,
+            PrimaryInputSource.korean.rawValue,
+        ]
+    )
+    #expect(
+        InputSourcePolicy.requiredSourceIDs(for: .koreanEnglishJapanese) == [
+            PrimaryInputSource.english.rawValue,
+            InputSourcePolicy.koreanInputMethodID,
+            PrimaryInputSource.korean.rawValue,
+            InputSourcePolicy.japaneseInputMethodID,
+            InputSourcePolicy.japaneseSourceID,
+        ]
+    )
+    #expect(InputSourcePolicy.selectableSourceIDs(for: .koreanEnglish).count == 2)
+    #expect(
+        InputSourcePolicy.selectableSourceIDs(for: .koreanEnglishJapanese).count == 3
+    )
+    #expect(InputMode.koreanEnglish.usesResidentHelper == false)
+    #expect(InputMode.koreanEnglishJapanese.usesResidentHelper)
+}
+
+@Test("Undeclared keyboard sources are removed, declared ones are kept")
+func extraSourceRemoval() {
+    let enabled = [
+        PrimaryInputSource.english.rawValue,
+        InputSourcePolicy.koreanInputMethodID,
+        PrimaryInputSource.korean.rawValue,
+        InputSourcePolicy.japaneseInputMethodID,
+        InputSourcePolicy.japaneseSourceID,
+        "com.apple.keylayout.Dvorak",
+    ]
+
+    #expect(
+        InputSourcePolicy.sourceIDsToDisable(
+            enabledKeyboardSourceIDs: enabled,
+            mode: .koreanEnglish
+        ) == [
+            InputSourcePolicy.japaneseInputMethodID,
+            InputSourcePolicy.japaneseSourceID,
+            "com.apple.keylayout.Dvorak",
+        ]
+    )
+    #expect(
+        InputSourcePolicy.sourceIDsToDisable(
+            enabledKeyboardSourceIDs: enabled,
+            mode: .koreanEnglishJapanese
+        ) == ["com.apple.keylayout.Dvorak"]
+    )
+    #expect(
+        InputSourcePolicy.sourceIDsToDisable(
+            enabledKeyboardSourceIDs: InputSourcePolicy.requiredSourceIDs(for: .koreanEnglish),
+            mode: .koreanEnglish
+        ).isEmpty
+    )
+}
+
 @Test("Unknown sources use the remembered primary source")
 func unknownSourceFallback() {
     #expect(
