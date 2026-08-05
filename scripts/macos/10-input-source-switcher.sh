@@ -47,10 +47,15 @@ SYMBOLIC_HOTKEYS_DOMAIN=com.apple.symbolichotkeys
 PREVIOUS_SOURCE_HOTKEY_ID=60
 F18_KEY_CODE=79
 SPACE_KEY_CODE=49
-NO_MODIFIER=0
+# A bare function key is not stored with an empty modifier mask: macOS records
+# its own F14/F15 brightness shortcuts with the function flag set, and the
+# shortcut does not fire without it.
+FUNCTION_MODIFIER=8388608
 CONTROL_MODIFIER=262144
-HOTKEY_F18_VALUE='{enabled=1;value={type=standard;parameters=(65535,79,0);};}'
-HOTKEY_STOCK_VALUE='{enabled=0;value={type=standard;parameters=(32,49,262144);};}'
+# Written as XML so the types match what macOS writes: enabled is a boolean, not
+# the integer that old-style plist syntax would produce.
+HOTKEY_F18_VALUE='<dict><key>enabled</key><true/><key>value</key><dict><key>type</key><string>standard</string><key>parameters</key><array><integer>65535</integer><integer>79</integer><integer>8388608</integer></array></dict></dict>'
+HOTKEY_STOCK_VALUE='<dict><key>enabled</key><false/><key>value</key><dict><key>type</key><string>standard</string><key>parameters</key><array><integer>32</integer><integer>49</integer><integer>262144</integer></array></dict></dict>'
 
 case "$INPUT_MODE" in
   ko-en)
@@ -366,7 +371,7 @@ case "$INPUT_MODE" in
     # shortcut is an exact Korean/English toggle.
     apply_input_sources
     remove_switcher_artifacts
-    apply_symbolic_hotkey true "$F18_KEY_CODE" "$NO_MODIFIER" \
+    apply_symbolic_hotkey true "$F18_KEY_CODE" "$FUNCTION_MODIFIER" \
       "$HOTKEY_F18_VALUE" \
       "native previous-input-source hotkey bound to F18"
     install_launch_agent "$KEYS_LABEL" "$KEYS_PLIST_SOURCE" "$KEYS_PLIST_TARGET"

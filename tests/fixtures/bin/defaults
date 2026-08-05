@@ -45,16 +45,19 @@ print_symbolic_hotkeys() {
 EOF
 }
 
+# The module writes the entry as an XML plist fragment so the value types match
+# what macOS itself writes, so the fixture parses that rather than old-style
+# plist syntax.
 record_symbolic_hotkey() {
   local value="$1"
-  local parameters
+  local integers
   local enabled
 
   case "$value" in
-    *enabled=1*)
+    *"<true/>"*)
       enabled=true
       ;;
-    *enabled=0*)
+    *"<false/>"*)
       enabled=false
       ;;
     *)
@@ -63,13 +66,14 @@ record_symbolic_hotkey() {
       ;;
   esac
 
-  parameters="${value#*parameters=(}"
-  parameters="${parameters%%)*}"
+  integers="$(printf '%s\n' "$value" \
+    | grep -o '<integer>[0-9]*</integer>' \
+    | sed 's/[^0-9]//g')"
 
   printf '%s %s %s\n' \
     "$enabled" \
-    "$(printf '%s\n' "$parameters" | cut -d, -f2)" \
-    "$(printf '%s\n' "$parameters" | cut -d, -f3)" \
+    "$(printf '%s\n' "$integers" | sed -n '2p')" \
+    "$(printf '%s\n' "$integers" | sed -n '3p')" \
     >"$HOTKEY_STATE"
 }
 
