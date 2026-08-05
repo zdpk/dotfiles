@@ -46,7 +46,7 @@ The macOS Bash module owns:
 3. A per-user LaunchAgent that reapplies the complete two-entry `hidutil` mapping at login.
 4. Removal of the superseded right-Command-to-Fn cycle LaunchAgent.
 
-The module requires ABC, Korean 2-Set, and Japanese Romaji to be enabled. It refuses to apply while Hammerspoon, an active Karabiner remapper, or the legacy Nix key mapping can compete for the same keys.
+The module enables ABC, Korean 2-Set, and Japanese Romaji through the Text Input Source API. The input-source-only entrypoint removes Hammerspoon first; the module still refuses to apply while Hammerspoon, an active Karabiner remapper, or the legacy Nix key mapping can compete for the same keys.
 
 ## Verification
 
