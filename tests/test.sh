@@ -104,6 +104,7 @@ run_dry_run() {
 default_dry_run_output="$(run_dry_run)"
 printf '%s\n' "$default_dry_run_output" | grep -q 'platform: macos'
 printf '%s\n' "$default_dry_run_output" | grep -q 'running scripts/common/10-config-links.sh'
+printf '%s\n' "$default_dry_run_output" | grep -q 'running scripts/macos/20-text-input.sh'
 printf '%s\n' "$default_dry_run_output" | grep -q 'input mode: ko-en'
 printf '%s\n' "$default_dry_run_output" | grep -q 'would apply input sources for mode: ko-en'
 printf '%s\n' "$default_dry_run_output" | grep -Eq 'right Command -> F18$|would apply right Command -> F18$'
@@ -163,6 +164,10 @@ cmp -s "$KEYS_KO_EN_PLIST" "$keys_target"
 # A bare function key carries the function modifier mask; without it macOS
 # never fires the shortcut.
 grep -qx 'true 79 8388608' "$TEST_ROOT/state/hotkey-60"
+# Period substitution inserts a character that was never typed, so the setup
+# turns it off explicitly rather than inheriting the machine default.
+printf '%s\n' "$first_run_output" | grep -q 'set double-space period substitution off'
+grep -qx '0' "$TEST_ROOT/state/period-substitution"
 
 second_run_output="$(run_isolated_bootstrap)"
 printf '%s\n' "$second_run_output" | grep -q 'unchanged:.*\.bashrc'
@@ -171,6 +176,7 @@ printf '%s\n' "$second_run_output" | grep -q 'unchanged:.*\.config/helix'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: native previous-input-source hotkey bound to F18'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: LaunchAgent is loaded: dev.undervars.dotfiles.input-source-keys'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: right Command -> F18$'
+printf '%s\n' "$second_run_output" | grep -q 'unchanged: double-space period substitution off'
 
 # Switching a machine up to three languages installs the helper and hands the
 # native shortcut back to macOS.
@@ -224,6 +230,9 @@ input_only_dry_run_output="$(
 )"
 printf '%s\n' "$input_only_dry_run_output" | grep -q 'input-source-only setup complete'
 printf '%s\n' "$input_only_dry_run_output" | grep -q 'input mode: ko-en'
+# The dedicated entrypoint must cover the typing defaults too, otherwise a
+# machine set up without the full bootstrap keeps the substitution.
+printf '%s\n' "$input_only_dry_run_output" | grep -Eq 'double-space period substitution off'
 printf '%s\n' "$input_only_dry_run_output" | grep -q 'would apply input sources for mode: ko-en'
 ! printf '%s\n' "$input_only_dry_run_output" | grep -q 'right Option -> F19'
 

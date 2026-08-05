@@ -12,8 +12,9 @@ usage() {
   cat <<'EOF'
 Usage: ./setup-input-sources.sh [--dry-run] [--mode <input-mode>]
 
-Removes Hammerspoon and configures the right-side modifier keys as dedicated
-input-source keys. No other dotfiles are applied.
+Removes Hammerspoon, configures the right-side modifier keys as dedicated
+input-source keys, and applies the typing defaults that belong with them. No
+shell, editor, terminal, or multiplexer configuration is linked.
 
 Options:
   --dry-run       Report changes without writing them.
@@ -59,4 +60,5 @@ export DOTFILES_INPUT_MODE
 
 bash "$DOTFILES_ROOT/scripts/macos/remove-hammerspoon.sh"
 bash "$DOTFILES_ROOT/scripts/macos/10-input-source-switcher.sh"
+bash "$DOTFILES_ROOT/scripts/macos/20-text-input.sh"
 log "input-source-only setup complete"

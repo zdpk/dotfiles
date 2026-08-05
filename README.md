@@ -121,6 +121,26 @@ objects and performs no polling, timers, retries, shell calls, or AppleScript on
 the key path. This mode also restores the native shortcut to its stock disabled
 state so that F18 is not handled twice.
 
+## macOS text input
+
+The second macOS module owns the global typing defaults that belong with the
+language keys. It writes each value explicitly rather than inheriting whatever
+the machine defaults to, so a fresh install and a hand-configured one end up in
+the same state:
+
+| Default | Value | Why |
+| --- | --- | --- |
+| `NSAutomaticPeriodSubstitutionEnabled` | `false` | Double-space inserts a period nobody typed |
+
+Period substitution is worth turning off for its failure mode rather than its
+feature: the insertion is silent, happens mid-flow while switching between
+Korean and English, and only surfaces later in the text, which makes it very
+hard to attribute to the right cause.
+
+Applications read these defaults when they launch, so already-running apps keep
+the old behavior until restarted. `setup-input-sources.sh` applies this module
+too, so a machine configured without the full bootstrap is not left behind.
+
 ## Ubuntu
 
 Ubuntu modules use the same ordered, idempotent execution contract. No Ubuntu-only settings are configured yet.

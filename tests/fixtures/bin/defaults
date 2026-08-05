@@ -5,6 +5,7 @@ set -euo pipefail
 : "${DOTFILES_TEST_STATE:?}"
 
 HOTKEY_STATE="$DOTFILES_TEST_STATE/hotkey-60"
+PERIOD_STATE="$DOTFILES_TEST_STATE/period-substitution"
 
 # The stock macOS state is a disabled shortcut still bound to Control-Space.
 print_symbolic_hotkeys() {
@@ -78,6 +79,27 @@ record_symbolic_hotkey() {
 }
 
 case "${1:-}:${2:-}:${3:-}" in
+  # Absent state stands in for a fresh machine, where the key is either unset
+  # or left at the macOS default of on.
+  read:-g:NSAutomaticPeriodSubstitutionEnabled)
+    [ -f "$PERIOD_STATE" ] || exit 1
+    cat "$PERIOD_STATE"
+    ;;
+  write:-g:NSAutomaticPeriodSubstitutionEnabled)
+    [ "${4:-}" = "-bool" ]
+    case "${5:-}" in
+      true)
+        printf '%s\n' '1' >"$PERIOD_STATE"
+        ;;
+      false)
+        printf '%s\n' '0' >"$PERIOD_STATE"
+        ;;
+      *)
+        printf 'unexpected boolean: %s\n' "${5:-}" >&2
+        exit 2
+        ;;
+    esac
+    ;;
   export:com.apple.symbolichotkeys:-)
     print_symbolic_hotkeys
     ;;
