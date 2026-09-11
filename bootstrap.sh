@@ -15,7 +15,7 @@ Usage: ./bootstrap.sh [--dry-run] [--mode <input-mode>] [--font <font>]
 Options:
   --dry-run       Report changes without writing them.
   --mode <mode>   macOS input mode: ko-en (default) or ko-en-ja.
-                  DOTFILES_INPUT_MODE sets the same value.
+                  DOTFILES_INPUT_MODE overrides the saved per-machine mode.
   --font <font>   Ghostty font: firacode (default) or geist.
                   DOTFILES_GHOSTTY_FONT sets the same value.
   -h, --help      Show this help.

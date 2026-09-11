@@ -5,39 +5,23 @@ enum InputSourcePolicySmokeTests {
     static func main() {
         precondition(
             InputSourcePolicy.primaryKeyTarget(
-                currentSourceID: PrimaryInputSource.english.rawValue,
-                lastPrimary: .english
+                currentSourceID: PrimaryInputSource.english.rawValue
             ) == .korean
         )
         precondition(
             InputSourcePolicy.primaryKeyTarget(
-                currentSourceID: PrimaryInputSource.korean.rawValue,
-                lastPrimary: .korean
+                currentSourceID: PrimaryInputSource.korean.rawValue
             ) == .english
         )
         precondition(
             InputSourcePolicy.primaryKeyTarget(
-                currentSourceID: InputSourcePolicy.japaneseSourceID,
-                lastPrimary: .korean
-            ) == .korean
-        )
-        precondition(
-            InputSourcePolicy.primaryToRememberBeforeJapanese(
-                currentSourceID: PrimaryInputSource.korean.rawValue,
-                lastPrimary: .english
-            ) == .korean
-        )
-        precondition(
-            InputSourcePolicy.primaryToRememberBeforeJapanese(
-                currentSourceID: InputSourcePolicy.japaneseSourceID,
-                lastPrimary: .korean
+                currentSourceID: InputSourcePolicy.japaneseSourceID
             ) == .korean
         )
         precondition(
             InputSourcePolicy.primaryKeyTarget(
-                currentSourceID: "example.unknown.input-source",
-                lastPrimary: .english
-            ) == .english
+                currentSourceID: "example.unknown.input-source"
+            ) == .korean
         )
 
         // Mode declarations: ko-en owns two selectable sources, ko-en-ja three,
@@ -64,7 +48,7 @@ enum InputSourcePolicySmokeTests {
         precondition(
             InputSourcePolicy.selectableSourceIDs(for: .koreanEnglishJapanese).count == 3
         )
-        precondition(InputMode.koreanEnglish.usesResidentHelper == false)
+        precondition(InputMode.koreanEnglish.usesResidentHelper)
         precondition(InputMode.koreanEnglishJapanese.usesResidentHelper)
         precondition(InputMode(rawValue: "ko-en") == .koreanEnglish)
         precondition(InputMode(rawValue: "ko-jp") == nil)

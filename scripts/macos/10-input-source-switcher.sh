@@ -33,40 +33,22 @@ PACKAGE_DIR="$DOTFILES_ROOT/config/macos/InputSourceSwitcher"
 SWITCHER_BINARY="$HOME_DIR/Library/Application Support/dev.undervars.dotfiles/bin/input-source-switcher"
 
 RIGHT_COMMAND_DECIMAL=30064771303
-RIGHT_OPTION_DECIMAL=30064771302
 F18_DECIMAL=30064771181
-F19_DECIMAL=30064771182
 
-# Set by resolve_tool_binary; ko-en runs it in place, ko-en-ja installs it.
+# Both modes install the same helper.
 TOOL_BINARY=""
 
-# "Select the previous input source" in System Settings > Keyboard Shortcuts.
-# In ko-en mode this native shortcut replaces the Swift helper: hidutil turns
-# right Command into F18 and macOS performs the switch itself.
+# Disable the old native input shortcut to avoid double-handling F18.
 SYMBOLIC_HOTKEYS_DOMAIN=com.apple.symbolichotkeys
 PREVIOUS_SOURCE_HOTKEY_ID=60
-F18_KEY_CODE=79
 SPACE_KEY_CODE=49
-# A bare function key is not stored with an empty modifier mask: macOS records
-# its own F14/F15 brightness shortcuts with the function flag set, and the
-# shortcut does not fire without it.
-FUNCTION_MODIFIER=8388608
 CONTROL_MODIFIER=262144
 # Written as XML so the types match what macOS writes: enabled is a boolean, not
 # the integer that old-style plist syntax would produce.
-HOTKEY_F18_VALUE='<dict><key>enabled</key><true/><key>value</key><dict><key>type</key><string>standard</string><key>parameters</key><array><integer>65535</integer><integer>79</integer><integer>8388608</integer></array></dict></dict>'
 HOTKEY_STOCK_VALUE='<dict><key>enabled</key><false/><key>value</key><dict><key>type</key><string>standard</string><key>parameters</key><array><integer>32</integer><integer>49</integer><integer>262144</integer></array></dict></dict>'
 
-case "$INPUT_MODE" in
-  ko-en)
-    MAPPING_DESCRIPTION='right Command -> F18'
-    EXPECTED_MAPPING_ENTRIES=1
-    ;;
-  ko-en-ja)
-    MAPPING_DESCRIPTION='right Command -> F18, right Option -> F19'
-    EXPECTED_MAPPING_ENTRIES=2
-    ;;
-esac
+MAPPING_DESCRIPTION='right Command -> F18'
+EXPECTED_MAPPING_ENTRIES=1
 
 require_command "$ACTIVATE_SETTINGS"
 require_command "$DEFAULTS"
@@ -104,9 +86,6 @@ check_remapper_conflicts() {
   fi
 }
 
-# Both modes drive the input-source list through the same Swift tool. ko-en runs
-# it straight from the build directory and never installs it, so that mode still
-# leaves no resident process behind.
 resolve_tool_binary() {
   local bin_dir
 
@@ -132,6 +111,7 @@ resolve_tool_binary() {
 # sources such as the character viewer are a different category and survive.
 apply_input_sources() {
   local disabled
+  local output
 
   if is_dry_run; then
     log "would build release input-source-switcher"
@@ -140,7 +120,8 @@ apply_input_sources() {
   fi
 
   resolve_tool_binary
-  disabled="$("$TOOL_BINARY" --apply-sources "$INPUT_MODE" | grep '^disabled=' || true)"
+  output="$("$TOOL_BINARY" --apply-sources "$INPUT_MODE")"
+  disabled="$(printf '%s\n' "$output" | grep '^disabled=' || true)"
 
   if [ -n "$disabled" ]; then
     printf '%s\n' "$disabled" | while IFS= read -r line; do
@@ -177,24 +158,6 @@ remove_launch_agent() {
 
 remove_legacy_cycle_agent() {
   remove_launch_agent "$LEGACY_CYCLE_LABEL" "$LEGACY_CYCLE_PLIST"
-}
-
-# Leaving the helper resident in ko-en mode would double-handle F18, so the
-# three-language artifacts are removed rather than merely left unloaded.
-remove_switcher_artifacts() {
-  remove_launch_agent "$SWITCHER_LABEL" "$SWITCHER_PLIST_TARGET"
-
-  if [ ! -e "$SWITCHER_BINARY" ]; then
-    return 0
-  fi
-
-  if is_dry_run; then
-    log "would remove: $SWITCHER_BINARY"
-    return 0
-  fi
-
-  rm -f "$SWITCHER_BINARY"
-  log "removed: $SWITCHER_BINARY"
 }
 
 install_switcher_binary() {
@@ -329,13 +292,6 @@ mapping_matches() {
   printf '%s\n' "$mapping" \
     | grep -q "HIDKeyboardModifierMappingDst = $F18_DECIMAL;" || return 1
 
-  if [ "$INPUT_MODE" = "ko-en-ja" ]; then
-    printf '%s\n' "$mapping" \
-      | grep -q "HIDKeyboardModifierMappingSrc = $RIGHT_OPTION_DECIMAL;" || return 1
-    printf '%s\n' "$mapping" \
-      | grep -q "HIDKeyboardModifierMappingDst = $F19_DECIMAL;" || return 1
-  fi
-
   return 0
 }
 
@@ -365,30 +321,27 @@ log "input mode: $INPUT_MODE"
 check_remapper_conflicts
 remove_legacy_cycle_agent
 
-case "$INPUT_MODE" in
-  ko-en)
-    # Reduce the source list first: with only two sources left, the native
-    # shortcut is an exact Korean/English toggle.
-    apply_input_sources
-    remove_switcher_artifacts
-    apply_symbolic_hotkey true "$F18_KEY_CODE" "$FUNCTION_MODIFIER" \
-      "$HOTKEY_F18_VALUE" \
-      "native previous-input-source hotkey bound to F18"
-    install_launch_agent "$KEYS_LABEL" "$KEYS_PLIST_SOURCE" "$KEYS_PLIST_TARGET"
-    apply_mapping
-    ;;
-  ko-en-ja)
-    apply_symbolic_hotkey false "$SPACE_KEY_CODE" "$CONTROL_MODIFIER" \
-      "$HOTKEY_STOCK_VALUE" \
-      "native previous-input-source hotkey disabled"
-    apply_input_sources
-    install_switcher_binary
-    install_launch_agent \
-      "$SWITCHER_LABEL" \
-      "$SWITCHER_PLIST_SOURCE" \
-      "$SWITCHER_PLIST_TARGET" \
-      "$DOTFILES_FILE_CHANGED"
-    install_launch_agent "$KEYS_LABEL" "$KEYS_PLIST_SOURCE" "$KEYS_PLIST_TARGET"
-    apply_mapping
-    ;;
-esac
+apply_symbolic_hotkey false "$SPACE_KEY_CODE" "$CONTROL_MODIFIER" \
+  "$HOTKEY_STOCK_VALUE" "native previous-input-source hotkey disabled"
+apply_input_sources
+install_switcher_binary
+binary_changed="$DOTFILES_FILE_CHANGED"
+
+# Render the mode into the installed agent, never into the shared source tree.
+rendered_plist="$(mktemp "${TMPDIR:-/tmp}/dotfiles-switcher-agent.XXXXXX")"
+trap 'rm -f "$rendered_plist"' EXIT
+sed "s/__INPUT_MODE__/$INPUT_MODE/g" "$SWITCHER_PLIST_SOURCE" >"$rendered_plist"
+install_launch_agent "$SWITCHER_LABEL" "$rendered_plist" \
+  "$SWITCHER_PLIST_TARGET" "$binary_changed"
+install_launch_agent "$KEYS_LABEL" "$KEYS_PLIST_SOURCE" "$KEYS_PLIST_TARGET"
+apply_mapping
+
+# Persist only after installation succeeds. This file is outside the checkout.
+mode_file="$HOME_DIR/.config/dotfiles/input-mode"
+if is_dry_run; then
+  log "would save input mode: $INPUT_MODE"
+else
+  mkdir -p "$(dirname "$mode_file")"
+  printf '%s\n' "$INPUT_MODE" >"$mode_file"
+  log "saved input mode: $INPUT_MODE"
+fi

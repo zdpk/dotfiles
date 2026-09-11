@@ -22,7 +22,12 @@ is_dry_run() {
 DOTFILES_INPUT_MODE_DEFAULT=ko-en
 
 resolve_input_mode() {
-  local mode="${DOTFILES_INPUT_MODE:-$DOTFILES_INPUT_MODE_DEFAULT}"
+  local mode="${DOTFILES_INPUT_MODE-$DOTFILES_INPUT_MODE_DEFAULT}"
+  local mode_file="${DOTFILES_HOME:-$HOME}/.config/dotfiles/input-mode"
+
+  if [ "${DOTFILES_INPUT_MODE+x}" != x ] && [ -f "$mode_file" ]; then
+    mode="$(cat "$mode_file")"
+  fi
 
   case "$mode" in
     ko-en | ko-en-ja)

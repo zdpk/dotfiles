@@ -9,7 +9,7 @@
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>exec "$HOME/Library/Application Support/dev.undervars.dotfiles/bin/input-source-switcher"</string>
+    <string>exec "$HOME/Library/Application Support/dev.undervars.dotfiles/bin/input-source-switcher" --run __INPUT_MODE__</string>
   </array>
 
   <key>KeepAlive</key>

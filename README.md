@@ -26,152 +26,60 @@ The repository is Bash-first. The former Nix configuration has been removed. Pla
 
 ## macOS input-source keys
 
-The first macOS module turns the right-side modifier keys into dedicated
-language keys. It has two modes, because not every machine needs Japanese.
+Both modes use one small Swift helper, started at login by a user LaunchAgent.
+`hidutil` maps only physical right Command to F18. Carbon global hotkeys select
+an exact Text Input Source instead of cycling through recently used languages.
 
-A mode is one declaration covering both halves of the setup: which keyboard
-input sources exist, and how switching between them happens. The source set
-decides the mechanism — two sources fit the native shortcut, three do not.
+- Right Command: Korean -> ABC; ABC, Japanese, or any other source -> Korean.
+- `ko-en-ja` only: Option+1 selects Japanese Romaji (Hiragana).
+- Right Command+Space cannot open Spotlight: the key is F18, not Command.
+  It still switches language on the right Command press; Space remains Space.
+- Left Command+Space remains the normal Spotlight shortcut. Both Option keys
+  remain modifiers. In `ko-en`, Option+1 keeps its ordinary application behavior.
+- Right Command is a dedicated language key, not a Command modifier for chords.
 
-| Mode | Keyboard input sources | Keys | Switching is performed by |
-| --- | --- | --- | --- |
-| `ko-en` (default) | ABC, Korean 2-Set | right Command | macOS itself |
-| `ko-en-ja` | ABC, Korean 2-Set, Japanese Romaji | right Command, right Option | a resident Swift helper |
+The two modes declare different enabled keyboard sources:
 
-Select the mode with `--mode`, the `MODE` variable, or `DOTFILES_INPUT_MODE`.
-The mode is not stored in the repository, so pass it on each run:
+- `ko-en`: ABC and Korean 2-Set.
+- `ko-en-ja`: ABC, Korean 2-Set, and Japanese Romaji.
 
-```bash
-./bootstrap.sh                            # ko-en
-./bootstrap.sh --mode ko-en-ja
-make setup MODE=ko-en-ja
-DOTFILES_INPUT_MODE=ko-en-ja ./bootstrap.sh
-```
-
-For an input-source-only setup that does not link the shell, editor, terminal,
-or multiplexer configuration, use the dedicated entrypoint. It removes
-Hammerspoon first, moving existing configuration and preferences under
-`~/.local/state/dotfiles/backups/hammerspoon/`:
+Select once on each machine:
 
 ```bash
-./setup-input-sources.sh --dry-run
-./setup-input-sources.sh --mode ko-en-ja
+./setup-input-sources.sh --mode ko-en-ja   # current m1-pro: Japanese enabled
+./setup-input-sources.sh --mode ko-en      # m5-air: Korean/English only
 ```
 
-Both modes own the complete `hidutil` `UserKeyMapping` array, install a per-user
-LaunchAgent that reapplies the mapping at login, and refuse an actual run while
-Hammerspoon, Karabiner, or the legacy Nix mapping is active. Left Command and
-left Option remain normal modifiers. Right Command-Space cannot open Spotlight
-because physical right Command is no longer a Command modifier.
+Successful installation saves the mode in `~/.config/dotfiles/input-mode`,
+outside this repository. Later `make input-sources` or `make setup` preserves
+it. Priority is `--mode` / `MODE=...`, then `DOTFILES_INPUT_MODE`, then the saved
+file, then `ko-en`. Dry runs never save a mode.
 
-Switching modes is safe in either direction: each mode removes the other's
-artifacts before installing its own.
+The input-only entrypoint migrates Hammerspoon and applies typing defaults;
+it does not link shell, terminal, or editor configuration. The full bootstrap
+runs keyboard modules only on macOS. Swift build tools are required on each Mac.
 
-### What this rests on
-
-Most of the mechanism is documented by Apple, but not all of it, which matters
-when a macOS release breaks something.
-
-The HID usage values come from [Technical Note TN2450][tn2450]: Right GUI
-`0xE7`, Right Alt `0xE6`, F18 `0x6D`, F19 `0x6E`, each or'd with `0x700000000`.
-The same note states that remappings are "lost when the system is restarted or
-if the keyboard service is removed", which is why the mapping needs a
-LaunchAgent at all; Apple documents no way to make them persistent, so the
-LaunchAgent is this repository's answer rather than a documented one.
-
-That second clause is a real limit. The LaunchAgent runs at login, so a
-keyboard attached later in the session is not covered — reapply with
-`make input-sources` after connecting one. `hidutil` has also regressed across
-releases before: on macOS 14.2 it reported success while silently not applying,
-and needed `sudo`. `apply_mapping` reads the mapping back and fails if it does
-not match, which catches an outright rejection, but not a build that claims
-success and does nothing.
-
-The input-source handling follows `TextInputSources.h`. Exactly one keyboard
-source is selected at a time and selecting a new one deselects the previous,
-while zero or more palette sources may be selected — which is why only the
-keyboard category is owned. An input mode can only be enabled once its parent
-input method is enabled, which is why each mode is listed after its parent in
-the declared set and enabled in that order.
-
-`com.apple.symbolichotkeys` is **not documented by Apple**. The entry format
-and the meaning of hotkey `60` were determined by reading what macOS writes for
-its own shortcuts, corroborated against third-party write-ups; `60` is
-"Select the previous input source", stock shortcut Control-Space, which matches
-the entry this repository replaces.
-
-The `parameters` array is `[character, key code, modifier mask]`. The mask is
-better grounded than the container around it: the values are the documented
-`NSEventModifierFlags` from `NSEvent.h`, so the function flag this setup needs
-is `NSEventModifierFlagFunction`, `1 << 23`, `8388608` — not a magic number.
-A bare function key is stored with that flag set, which is how macOS records
-its own F14 and F15 brightness shortcuts, and the shortcut does not fire
-without it.
-
-Applying the change without a logout needs
-`SystemAdministration.framework/Resources/activateSettings -u`, a private
-binary with no documented alternative.
-
-So ko-en carries a risk that a future macOS changes this format, while
-ko-en-ja does not, since it uses documented Carbon and Text Input Source APIs
-throughout. The module re-reads the entry after writing it and fails loudly if
-it did not persist, so a break shows up during setup rather than silently.
-
-[tn2450]: https://developer.apple.com/library/archive/technotes/tn2450/_index.html
-
-### The input-source list
-
-dotfiles owns the keyboard input-source list the way it owns `UserKeyMapping`.
-Both modes run the same tool, which enables everything the mode declares and
-disables any other enabled *keyboard* source, reporting each removal:
-
-```text
-[dotfiles] disabled input source: com.apple.keylayout.Dvorak
+```bash
+make input-sources-dry-run
+make input-sources
 ```
 
-Palette sources — the character viewer, press-and-hold, the Japanese 50-on
-palette — are a separate Text Input Source category, are never part of the
-keyboard rotation, and are left alone.
+The installer enables the mode's sources and disables undeclared keyboard
+sources. Palette sources are preserved. It clears the old native input shortcut
+so F18 has exactly one owner, replaces the old right Option -> F19 mapping, and
+reloads the helper when either its binary or mode changes.
 
-Owning the list is what makes `ko-en` correct rather than merely convenient: its
-shortcut walks the most recently used sources, so it is an exact Korean/English
-toggle only while those are the only two keyboard sources.
+The hardware mapping owns the complete `hidutil` UserKeyMapping array.
+[Apple TN2450](https://developer.apple.com/library/archive/technotes/tn2450/_index.html)
+documents that mappings are lost at restart or when the keyboard service is
+removed. The login agent restores them at login; reapply `make input-sources`
+after attaching a keyboard if its mapping is missing. Mapping readback does not
+prove physical-key behavior. Test actual composition and Secure Input on each
+Mac after installation or an OS upgrade.
 
-Because there is no built-in macOS command for this, both modes need the Swift
-toolchain at setup time. Only `ko-en-ja` installs a binary or leaves a process
-running.
-
-### ko-en
-
-```text
-physical right Command -> hidutil F18 -> macOS "select the previous input source"
-```
-
-Nothing is installed and nothing stays resident. The tool is built, run once to
-apply the source list, and left in the build directory. The module then binds
-the stock `Select the previous input source` shortcut (symbolic hotkey `60`) to
-a bare F18 and lets macOS perform the switch.
-
-### ko-en-ja
-
-```text
-physical right Command -> hidutil F18 -> resident Swift helper -> English/Korean
-physical right Option  -> hidutil F19 -> resident Swift helper -> Japanese
-```
-
-```text
-right Command: English -> Korean, Korean -> English
-right Option:  English/Korean -> Japanese
-right Command from Japanese: return to the last English/Korean source
-```
-
-Three sources cannot be driven by a history-based shortcut, so the same
-executable is installed and kept resident by a second LaunchAgent. It registers
-F18/F19 with Carbon (so the hotkeys survive Secure Input) and selects exact
-input sources through the Text Input Source API. It caches all input-source
-objects and performs no polling, timers, retries, shell calls, or AppleScript on
-the key path. This mode also restores the native shortcut to its stock disabled
-state so that F18 is not handled twice.
+`com.apple.symbolichotkeys` and `activateSettings -u` are undocumented migration
+interfaces used to disable the previous implementation's shortcut. Runtime
+switching uses Carbon and Text Input Source APIs, not that preference format.
 
 ## macOS text input
 
@@ -265,7 +173,7 @@ Ubuntu modules use the same ordered, idempotent execution contract. No Ubuntu-on
 ./tests/test.sh
 ```
 
-On macOS, the test checks Swift policy behavior, the release build, Bash syntax, LaunchAgent plists, HID usages per mode, common configuration links, backup behavior, and repeated bootstrap execution. It also switches the Ghostty font profile out and back to confirm the link is repointed rather than backed up. Homebrew is stubbed there, so the suite never installs a cask. It also drives a machine through `ko-en` -> `ko-en-ja` -> `ko-en` against stubbed system commands to confirm that each mode removes the other's artifacts. If `shellcheck` is installed, it runs automatically.
+On macOS, the test checks Swift policy behavior, the release build, Bash syntax, LaunchAgent plists, HID usages per mode, common configuration links, backup behavior, and repeated bootstrap execution. It also switches the Ghostty font profile out and back to confirm the link is repointed rather than backed up. Homebrew is stubbed there, so the suite never installs a cask. It also drives a machine through `ko-en` -> `ko-en-ja` -> `ko-en` against stubbed system commands to confirm that mode changes reload the helper and preserve the saved per-machine mode. If `shellcheck` is installed, it runs automatically.
 
 The suite never calls `--apply-sources` against the real machine; only the
 read-only `--check` runs there. Policy coverage lives in

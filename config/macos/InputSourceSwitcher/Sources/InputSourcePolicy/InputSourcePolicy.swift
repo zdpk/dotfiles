@@ -3,10 +3,7 @@ public enum PrimaryInputSource: String, CaseIterable, Sendable {
     case korean = "com.apple.inputmethod.Korean.2SetKorean"
 }
 
-/// A machine runs exactly one mode. The mode declares which keyboard input
-/// sources exist, which in turn decides how switching is performed: two sources
-/// can ride on the native "select the previous input source" shortcut, three
-/// need the resident helper.
+/// Both modes use the same deterministic switcher; Japanese is opt-in.
 public enum InputMode: String, CaseIterable, Sendable {
     case koreanEnglish = "ko-en"
     case koreanEnglishJapanese = "ko-en-ja"
@@ -16,7 +13,7 @@ public enum InputMode: String, CaseIterable, Sendable {
     }
 
     public var usesResidentHelper: Bool {
-        includesJapanese
+        true
     }
 }
 
@@ -69,24 +66,8 @@ public enum InputSourcePolicy {
         PrimaryInputSource(rawValue: sourceID)
     }
 
-    public static func primaryKeyTarget(
-        currentSourceID: String,
-        lastPrimary: PrimaryInputSource
-    ) -> PrimaryInputSource {
-        switch primarySource(for: currentSourceID) {
-        case .english:
-            return .korean
-        case .korean:
-            return .english
-        case nil:
-            return lastPrimary
-        }
-    }
-
-    public static func primaryToRememberBeforeJapanese(
-        currentSourceID: String,
-        lastPrimary: PrimaryInputSource
-    ) -> PrimaryInputSource {
-        primarySource(for: currentSourceID) ?? lastPrimary
+    /// Right Command can never select Japanese. Japanese/unknown -> Korean.
+    public static func primaryKeyTarget(currentSourceID: String) -> PrimaryInputSource {
+        currentSourceID == PrimaryInputSource.korean.rawValue ? .english : .korean
     }
 }

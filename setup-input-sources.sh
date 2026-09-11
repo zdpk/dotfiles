@@ -20,8 +20,8 @@ Options:
   --dry-run       Report changes without writing them.
   --mode <mode>   ko-en    right Command switches English/Korean (default)
                   ko-en-ja right Command switches English/Korean and
-                           right Option switches to Japanese
-                  DOTFILES_INPUT_MODE sets the same value.
+                           Option+1 switches to Japanese
+                  DOTFILES_INPUT_MODE overrides the saved per-machine mode.
   -h, --help      Show this help.
 EOF
 }

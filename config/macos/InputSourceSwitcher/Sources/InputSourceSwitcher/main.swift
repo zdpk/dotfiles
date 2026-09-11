@@ -12,8 +12,12 @@ private enum HotKey: UInt32 {
         case .primary:
             return UInt32(kVK_F18)
         case .japanese:
-            return UInt32(kVK_F19)
+            return UInt32(kVK_ANSI_1)
         }
+    }
+
+    var modifiers: UInt32 {
+        self == .japanese ? UInt32(optionKey) : 0
     }
 }
 
@@ -180,22 +184,15 @@ private final class InputSourceStore {
 
 private final class InputSourceSwitcher {
     private static let hotKeySignature: OSType = 0x49535357 // ISSW
-    private static let defaultsSuite = "dev.undervars.input-source-switcher"
-    private static let lastPrimaryKey = "lastPrimarySourceID"
 
     private let mode: InputMode
     private let sourceStore: InputSourceStore
-    private let defaults: UserDefaults
-    private var lastPrimary: PrimaryInputSource
     private var hotKeyRefs: [EventHotKeyRef] = []
     private var pressedHotKeys: Set<HotKey> = []
 
     init(mode: InputMode) throws {
         self.mode = mode
         sourceStore = try InputSourceStore(mode: mode)
-        defaults = UserDefaults(suiteName: Self.defaultsSuite)!
-        lastPrimary = defaults.string(forKey: Self.lastPrimaryKey)
-            .flatMap(PrimaryInputSource.init(rawValue:)) ?? .english
     }
 
     func installHotKeys() throws {
@@ -230,7 +227,7 @@ private final class InputSourceSwitcher {
             throw SwitcherError.carbonCall("InstallEventHandler", handlerStatus)
         }
 
-        for hotKey in [HotKey.primary, .japanese] {
+        for hotKey in (mode.includesJapanese ? [HotKey.primary, .japanese] : [.primary]) {
             var hotKeyRef: EventHotKeyRef?
             let hotKeyID = EventHotKeyID(
                 signature: Self.hotKeySignature,
@@ -238,7 +235,7 @@ private final class InputSourceSwitcher {
             )
             let status = RegisterEventHotKey(
                 hotKey.virtualKeyCode,
-                0,
+                hotKey.modifiers,
                 hotKeyID,
                 GetEventDispatcherTarget(),
                 0,
@@ -254,7 +251,6 @@ private final class InputSourceSwitcher {
     func printCheck() {
         print("mode=\(mode.rawValue)")
         print("current=\(sourceStore.currentSourceID)")
-        print("lastPrimary=\(lastPrimary.rawValue)")
         print("english=\(PrimaryInputSource.english.rawValue)")
         print("korean=\(PrimaryInputSource.korean.rawValue)")
         if mode.includesJapanese {
@@ -298,17 +294,10 @@ private final class InputSourceSwitcher {
             switch hotKey {
             case .primary:
                 let target = InputSourcePolicy.primaryKeyTarget(
-                    currentSourceID: sourceStore.currentSourceID,
-                    lastPrimary: lastPrimary
+                    currentSourceID: sourceStore.currentSourceID
                 )
                 try sourceStore.select(sourceID: target.rawValue)
-                remember(target)
             case .japanese:
-                let remembered = InputSourcePolicy.primaryToRememberBeforeJapanese(
-                    currentSourceID: sourceStore.currentSourceID,
-                    lastPrimary: lastPrimary
-                )
-                remember(remembered)
                 try sourceStore.select(sourceID: InputSourcePolicy.japaneseSourceID)
             }
         } catch {
@@ -316,14 +305,6 @@ private final class InputSourceSwitcher {
                 Data("input-source-switcher: \(error)\n".utf8)
             )
         }
-    }
-
-    private func remember(_ source: PrimaryInputSource) {
-        guard source != lastPrimary else {
-            return
-        }
-        lastPrimary = source
-        defaults.set(source.rawValue, forKey: Self.lastPrimaryKey)
     }
 }
 
@@ -346,12 +327,19 @@ private func parseMode(_ rawValue: String) -> InputMode {
 
 private let usage = """
 usage: input-source-switcher [--apply-sources <mode>] [--check [<mode>]]
-       input-source-switcher                 run the resident ko-en-ja helper
+       input-source-switcher [--run <mode>]  run the resident helper
        modes: \(InputMode.allCases.map(\.rawValue).joined(separator: ", "))
 """
 
-// The resident helper only exists in ko-en-ja, so a bare invocation and a bare
-// --check both mean that mode.
+private func savedMode() -> InputMode {
+    let path = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".config/dotfiles/input-mode")
+    guard FileManager.default.fileExists(atPath: path.path) else { return .koreanEnglish }
+    guard let value = try? String(contentsOf: path, encoding: .utf8) else {
+        fail("cannot read input mode: \(path.path)", code: EX_CONFIG)
+    }
+    return parseMode(value.trimmingCharacters(in: .whitespacesAndNewlines))
+}
 let arguments = Array(CommandLine.arguments.dropFirst())
 
 do {
@@ -374,12 +362,16 @@ do {
         }
         let mode = arguments.count == 2
             ? parseMode(arguments[1])
-            : InputMode.koreanEnglishJapanese
+            : savedMode()
         try InputSourceSwitcher(mode: mode).printCheck()
         exit(EXIT_SUCCESS)
 
-    case nil:
-        let switcher = try InputSourceSwitcher(mode: .koreanEnglishJapanese)
+    case nil, "--run":
+        guard arguments.isEmpty || arguments.count == 2 else {
+            fail(usage, code: EX_USAGE)
+        }
+        let mode = arguments.isEmpty ? savedMode() : parseMode(arguments[1])
+        let switcher = try InputSourceSwitcher(mode: mode)
         try switcher.installHotKeys()
         NSApplication.shared.setActivationPolicy(.accessory)
         NSApplication.shared.run()

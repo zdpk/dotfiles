@@ -5,48 +5,25 @@ import Testing
 func primaryToggle() {
     #expect(
         InputSourcePolicy.primaryKeyTarget(
-            currentSourceID: PrimaryInputSource.english.rawValue,
-            lastPrimary: .english
+            currentSourceID: PrimaryInputSource.english.rawValue
         ) == .korean
     )
     #expect(
         InputSourcePolicy.primaryKeyTarget(
-            currentSourceID: PrimaryInputSource.korean.rawValue,
-            lastPrimary: .korean
+            currentSourceID: PrimaryInputSource.korean.rawValue
         ) == .english
     )
 }
 
-@Test("Right Command returns from Japanese to the remembered primary source")
+@Test("Right Command always returns from Japanese to Korean")
 func japaneseReturn() {
-    #expect(
-        InputSourcePolicy.primaryKeyTarget(
-            currentSourceID: InputSourcePolicy.japaneseSourceID,
-            lastPrimary: .korean
-        ) == .korean
+    let fromJapanese = InputSourcePolicy.primaryKeyTarget(
+        currentSourceID: InputSourcePolicy.japaneseSourceID
     )
-    #expect(
-        InputSourcePolicy.primaryKeyTarget(
-            currentSourceID: InputSourcePolicy.japaneseSourceID,
-            lastPrimary: .english
-        ) == .english
-    )
-}
-
-@Test("Right Option remembers only a primary source")
-func japaneseMemory() {
-    #expect(
-        InputSourcePolicy.primaryToRememberBeforeJapanese(
-            currentSourceID: PrimaryInputSource.korean.rawValue,
-            lastPrimary: .english
-        ) == .korean
-    )
-    #expect(
-        InputSourcePolicy.primaryToRememberBeforeJapanese(
-            currentSourceID: InputSourcePolicy.japaneseSourceID,
-            lastPrimary: .korean
-        ) == .korean
-    )
+    #expect(fromJapanese == .korean)
+    let next = InputSourcePolicy.primaryKeyTarget(currentSourceID: fromJapanese.rawValue)
+    #expect(next == .english)
+    #expect(InputSourcePolicy.primaryKeyTarget(currentSourceID: next.rawValue) == .korean)
 }
 
 @Test("Each mode declares its own source set")
@@ -71,7 +48,7 @@ func declaredSources() {
     #expect(
         InputSourcePolicy.selectableSourceIDs(for: .koreanEnglishJapanese).count == 3
     )
-    #expect(InputMode.koreanEnglish.usesResidentHelper == false)
+    #expect(InputMode.koreanEnglish.usesResidentHelper)
     #expect(InputMode.koreanEnglishJapanese.usesResidentHelper)
 }
 
@@ -110,12 +87,11 @@ func extraSourceRemoval() {
     )
 }
 
-@Test("Unknown sources use the remembered primary source")
+@Test("Unknown sources return to Korean")
 func unknownSourceFallback() {
     #expect(
         InputSourcePolicy.primaryKeyTarget(
-            currentSourceID: "example.unknown.input-source",
-            lastPrimary: .english
-        ) == .english
+            currentSourceID: "example.unknown.input-source"
+        ) == .korean
     )
 }
