@@ -227,6 +227,14 @@ printf '%s\n' "$second_run_output" | grep -q 'unchanged: smart quote substitutio
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: smart dash substitution off'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: automatic spelling correction off'
 
+# A binary-only update must not unregister an unchanged LaunchAgent. macOS
+# can reject immediate re-registration while the old job is still retiring.
+printf '\n# stale installed binary\n' >>"$switcher_binary"
+binary_update_output="$(run_isolated_bootstrap)"
+printf '%s\n' "$binary_update_output" | grep -q 'restarted LaunchAgent: dev.undervars.dotfiles.input-source-switcher'
+test -f "$TEST_ROOT/state/kickstarted-dev.undervars.dotfiles.input-source-switcher"
+! printf '%s\n' "$binary_update_output" | grep -q 'reloaded LaunchAgent: dev.undervars.dotfiles.input-source-switcher'
+
 # Mode changes reload the same helper and preserve Option as a modifier.
 ja_run_output="$(run_isolated_bootstrap --mode ko-en-ja)"
 printf '%s\n' "$ja_run_output" | grep -q 'input mode: ko-en-ja'

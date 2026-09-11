@@ -1,4 +1,4 @@
-.PHONY: help setup input-sources input-sources-dry-run dry-run test
+.PHONY: help setup input-sources input-sources-dry-run input-diagnostics dry-run test
 
 .DEFAULT_GOAL := help
 
@@ -11,6 +11,7 @@ help:
 	  'make setup    Apply common and platform-specific Bash modules' \
 	  'make input-sources  Apply only native macOS input-source keys' \
 	  'make input-sources-dry-run  Inspect input-source-only changes' \
+	  'make input-diagnostics  Inspect input switching state and recent logs' \
 	  'make dry-run  Inspect changes without writing' \
 	  'make test     Run the test suite for this platform' \
 	  '' \
@@ -28,6 +29,9 @@ input-sources:
 
 input-sources-dry-run:
 	./setup-input-sources.sh $(if $(MODE),--mode $(MODE)) --dry-run
+
+input-diagnostics:
+	./script/input-source-diagnostics.sh
 
 dry-run:
 	./bootstrap.sh $(if $(MODE),--mode $(MODE)) --font $(FONT) --dry-run

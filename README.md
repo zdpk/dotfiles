@@ -81,6 +81,39 @@ Mac after installation or an OS upgrade.
 interfaces used to disable the previous implementation's shortcut. Runtime
 switching uses Carbon and Text Input Source APIs, not that preference format.
 
+### Diagnose an intermittent missed switch
+
+```bash
+make input-diagnostics
+./script/input-source-diagnostics.sh --follow
+```
+
+These commands inspect the installed service without restarting it. The helper
+records a small sequence of events through Apple's unified log, under subsystem
+`dev.undervars.dotfiles.input-source-switcher`, category `Switching`:
+
+- `switch`: received hotkey, source before/target/immediate readback, selection
+  API time (`api_us`), time through selection (`handler_us`), event delivery delay
+  (`queue_us`), sampled modifiers and Secure Input status.
+- `up`: key release and held duration.
+- `down_ignored`: a repeated press was rejected because release was not observed.
+  This can also be ordinary key repeat; it alone does not prove a lost release.
+- `source_changed`: macOS selection notification, correlated by timestamp.
+  Other applications can also change the source. Duplicate notifications can
+  report the same current source and do not imply another switch.
+- `switch_failed`: input-source selection returned an error.
+
+Only registered language hotkeys and source IDs are recorded, never typed text,
+document contents, or general keystrokes. Logs are subject to macOS retention.
+Source readback does not prove usable composition, and API timing is not the
+full physical-key-to-screen latency. If a physical press has no log, compare its
+time with the service/mapping snapshot and any held modifier keys.
+
+Selection remains immediate. Logging and readback happen after selection; there
+are no retry timers, polling loops, synthetic keystrokes, or delayed replays.
+The diagnostic build preserves the existing press/release suppression behavior
+so evidence can be collected before changing it.
+
 ## macOS text input
 
 The second macOS module owns the global typing defaults that belong with the

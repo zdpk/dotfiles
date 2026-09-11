@@ -193,10 +193,15 @@ install_launch_agent() {
   fi
 
   if "$LAUNCHCTL" print "$domain/$label" >/dev/null 2>&1; then
-    if [ "$plist_changed" -eq 1 ] || [ "$force_reload" -eq 1 ]; then
+    if [ "$plist_changed" -eq 1 ]; then
       "$LAUNCHCTL" bootout "$domain/$label"
       "$LAUNCHCTL" bootstrap "$domain" "$target_path"
       log "reloaded LaunchAgent: $label"
+    elif [ "$force_reload" -eq 1 ]; then
+      # A binary-only update can reuse the registered job. Immediate
+      # bootout/bootstrap can race launchd's asynchronous service removal.
+      "$LAUNCHCTL" kickstart -k "$domain/$label"
+      log "restarted LaunchAgent: $label"
     else
       log "unchanged: LaunchAgent is loaded: $label"
     fi

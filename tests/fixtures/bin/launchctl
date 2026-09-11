@@ -26,6 +26,12 @@ case "${1:-}" in
     label="$(label_from_service "${2:-}")"
     rm -f "$DOTFILES_TEST_STATE/launch-agent-$label"
     ;;
+  kickstart)
+    [ "${2:-}" = -k ]
+    label="$(label_from_service "${3:-}")"
+    [ -f "$DOTFILES_TEST_STATE/launch-agent-$label" ]
+    : >"$DOTFILES_TEST_STATE/kickstarted-$label"
+    ;;
   *)
     printf 'unexpected launchctl invocation: %s\n' "$*" >&2
     exit 2

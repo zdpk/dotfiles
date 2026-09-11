@@ -2,6 +2,12 @@ import AppKit
 import Carbon
 import Foundation
 import InputSourcePolicy
+import OSLog
+
+private let diagnostics = Logger(
+    subsystem: "dev.undervars.dotfiles.input-source-switcher",
+    category: "Switching"
+)
 
 private enum HotKey: UInt32 {
     case primary = 1
@@ -18,6 +24,10 @@ private enum HotKey: UInt32 {
 
     var modifiers: UInt32 {
         self == .japanese ? UInt32(optionKey) : 0
+    }
+
+    var name: String {
+        self == .primary ? "primary" : "japanese"
     }
 }
 
@@ -188,7 +198,9 @@ private final class InputSourceSwitcher {
     private let mode: InputMode
     private let sourceStore: InputSourceStore
     private var hotKeyRefs: [EventHotKeyRef] = []
-    private var pressedHotKeys: Set<HotKey> = []
+    private var pressedHotKeys: [HotKey: UInt64] = [:]
+    private var eventSequence = 0
+    private var sourceObserver: NSObjectProtocol?
 
     init(mode: InputMode) throws {
         self.mode = mode
@@ -246,11 +258,27 @@ private final class InputSourceSwitcher {
             }
             hotKeyRefs.append(hotKeyRef)
         }
+
+        // Observe macOS acknowledgements without polling or retrying a switch.
+        sourceObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil,
+            queue: .main
+        ) { _ in
+            let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+            let current = InputSourceCatalog.stringProperty(
+                source, key: kTISPropertyInputSourceID
+            ) ?? ""
+            diagnostics.notice("source_changed current=\(current, privacy: .public)")
+        }
+        diagnostics.notice("ready mode=\(self.mode.rawValue, privacy: .public) hotkeys=\(self.hotKeyRefs.count) secure=\(IsSecureEventInputEnabled())")
     }
 
     func printCheck() {
         print("mode=\(mode.rawValue)")
         print("current=\(sourceStore.currentSourceID)")
+        print("secureInput=\(IsSecureEventInputEnabled())")
+        print("modifierFlags=\(CGEventSource.flagsState(.combinedSessionState).rawValue)")
         print("english=\(PrimaryInputSource.english.rawValue)")
         print("korean=\(PrimaryInputSource.korean.rawValue)")
         if mode.includesJapanese {
@@ -275,32 +303,47 @@ private final class InputSourceSwitcher {
             return OSStatus(eventNotHandledErr)
         }
 
+        let receivedAt = DispatchTime.now().uptimeNanoseconds
+        let queueUS = Int(max(0, GetCurrentEventTime() - GetEventTime(event)) * 1_000_000)
+        eventSequence += 1
+        let sequence = eventSequence
+
         switch GetEventKind(event) {
         case UInt32(kEventHotKeyPressed):
-            guard pressedHotKeys.insert(hotKey).inserted else {
+            if let pressedAt = pressedHotKeys[hotKey] {
+                let heldMS = (receivedAt - pressedAt) / 1_000_000
+                diagnostics.notice("down_ignored seq=\(sequence) key=\(hotKey.name, privacy: .public) reason=already_pressed held_ms=\(heldMS) queue_us=\(queueUS) flags=\(CGEventSource.flagsState(.combinedSessionState).rawValue) secure=\(IsSecureEventInputEnabled())")
                 return noErr
             }
-            perform(hotKey)
+            pressedHotKeys[hotKey] = receivedAt
+            perform(hotKey, sequence: sequence, receivedAt: receivedAt, queueUS: queueUS)
         case UInt32(kEventHotKeyReleased):
-            pressedHotKeys.remove(hotKey)
+            let pressedAt = pressedHotKeys.removeValue(forKey: hotKey)
+            let heldMS = pressedAt.map { Int((receivedAt - $0) / 1_000_000) } ?? -1
+            diagnostics.notice("up seq=\(sequence) key=\(hotKey.name, privacy: .public) held_ms=\(heldMS) queue_us=\(queueUS)")
         default:
             return OSStatus(eventNotHandledErr)
         }
         return noErr
     }
 
-    private func perform(_ hotKey: HotKey) {
+    private func perform(_ hotKey: HotKey, sequence: Int, receivedAt: UInt64, queueUS: Int) {
+        let before = sourceStore.currentSourceID
+        let target = hotKey == .primary
+            ? InputSourcePolicy.primaryKeyTarget(currentSourceID: before).rawValue
+            : InputSourcePolicy.japaneseSourceID
+        let selectionStarted = DispatchTime.now().uptimeNanoseconds
         do {
-            switch hotKey {
-            case .primary:
-                let target = InputSourcePolicy.primaryKeyTarget(
-                    currentSourceID: sourceStore.currentSourceID
-                )
-                try sourceStore.select(sourceID: target.rawValue)
-            case .japanese:
-                try sourceStore.select(sourceID: InputSourcePolicy.japaneseSourceID)
-            }
+            try sourceStore.select(sourceID: target)
+            let selectionFinished = DispatchTime.now().uptimeNanoseconds
+            let apiUS = (selectionFinished - selectionStarted) / 1_000
+            let handlerUS = (selectionFinished - receivedAt) / 1_000
+            // Readback and logging happen after the immediate selection. A
+            // matching ID is not proof that the front app accepted composition.
+            let after = sourceStore.currentSourceID
+            diagnostics.notice("switch seq=\(sequence) key=\(hotKey.name, privacy: .public) before=\(before, privacy: .public) target=\(target, privacy: .public) after=\(after, privacy: .public) matched=\(after == target) api_us=\(apiUS) handler_us=\(handlerUS) queue_us=\(queueUS) flags=\(CGEventSource.flagsState(.combinedSessionState).rawValue) secure=\(IsSecureEventInputEnabled())")
         } catch {
+            diagnostics.error("switch_failed seq=\(sequence) key=\(hotKey.name, privacy: .public) before=\(before, privacy: .public) target=\(target, privacy: .public) error=\(String(describing: error), privacy: .public)")
             FileHandle.standardError.write(
                 Data("input-source-switcher: \(error)\n".utf8)
             )
