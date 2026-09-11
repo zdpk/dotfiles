@@ -2,8 +2,9 @@
 
 .DEFAULT_GOAL := help
 
-# Override per machine: make setup MODE=ko-en-ja
+# Override per machine: make setup MODE=ko-en-ja FONT=geist
 MODE ?= ko-en
+FONT ?= firacode
 
 help:
 	@printf '%s\n' \
@@ -14,10 +15,13 @@ help:
 	  'make test     Run the test suite for this platform' \
 	  '' \
 	  'MODE=ko-en     right Command switches English/Korean (default)' \
-	  'MODE=ko-en-ja  adds right Option for Japanese'
+	  'MODE=ko-en-ja  adds right Option for Japanese' \
+	  '' \
+	  'FONT=firacode  Ghostty uses FiraCode Nerd Font (default)' \
+	  'FONT=geist     Ghostty uses GeistMono Nerd Font'
 
 setup:
-	./bootstrap.sh --mode $(MODE)
+	./bootstrap.sh --mode $(MODE) --font $(FONT)
 
 input-sources:
 	./setup-input-sources.sh --mode $(MODE)
@@ -26,7 +30,7 @@ input-sources-dry-run:
 	./setup-input-sources.sh --mode $(MODE) --dry-run
 
 dry-run:
-	./bootstrap.sh --mode $(MODE) --dry-run
+	./bootstrap.sh --mode $(MODE) --font $(FONT) --dry-run
 
 test:
 	./tests/test.sh

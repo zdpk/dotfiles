@@ -95,8 +95,10 @@ fi
 ! "$ROOT/setup-input-sources.sh" --mode '' --dry-run >/dev/null 2>&1
 
 run_dry_run() {
-  DOTFILES_HOME="$TEST_ROOT/home" \
+  DOTFILES_BREW="$FIXTURE_BIN/brew" \
+    DOTFILES_HOME="$TEST_ROOT/home" \
     DOTFILES_STATE_HOME="$TEST_ROOT/state-home" \
+    DOTFILES_TEST_STATE="$TEST_ROOT/state" \
     "$ROOT/bootstrap.sh" --dry-run "$@" 2>&1
 }
 
@@ -106,10 +108,24 @@ printf '%s\n' "$default_dry_run_output" | grep -q 'platform: macos'
 printf '%s\n' "$default_dry_run_output" | grep -q 'running scripts/common/10-config-links.sh'
 printf '%s\n' "$default_dry_run_output" | grep -q 'running scripts/macos/20-text-input.sh'
 printf '%s\n' "$default_dry_run_output" | grep -q 'input mode: ko-en'
+printf '%s\n' "$default_dry_run_output" | grep -q 'ghostty font: firacode'
+printf '%s\n' "$default_dry_run_output" | grep -q 'would install font cask: font-fira-code-nerd-font'
+printf '%s\n' "$default_dry_run_output" | grep -q 'would install font cask: font-geist-mono-nerd-font'
 printf '%s\n' "$default_dry_run_output" | grep -q 'would apply input sources for mode: ko-en'
 printf '%s\n' "$default_dry_run_output" | grep -Eq 'right Command -> F18$|would apply right Command -> F18$'
 ! printf '%s\n' "$default_dry_run_output" | grep -q 'right Option -> F19'
 ! printf '%s\n' "$default_dry_run_output" | grep -q 'would install:.*input-source-switcher'
+
+# The font is a separate axis from the input mode, so it is selectable on its
+# own and rejected by name rather than silently ignored.
+geist_dry_run_output="$(run_dry_run --font geist)"
+printf '%s\n' "$geist_dry_run_output" | grep -q 'ghostty font: geist'
+printf '%s\n' "$geist_dry_run_output" | grep -q 'would link:.*ghostty/font.conf -> .*fonts/geist.conf'
+geist_equals_output="$(run_dry_run --font=geist)"
+printf '%s\n' "$geist_equals_output" | grep -q 'ghostty font: geist'
+geist_env_output="$(DOTFILES_GHOSTTY_FONT=geist run_dry_run)"
+printf '%s\n' "$geist_env_output" | grep -q 'ghostty font: geist'
+! "$ROOT/bootstrap.sh" --font comic-sans --dry-run >/dev/null 2>&1
 
 ja_dry_run_output="$(run_dry_run --mode ko-en-ja)"
 printf '%s\n' "$ja_dry_run_output" | grep -q 'input mode: ko-en-ja'
@@ -124,6 +140,7 @@ printf '%s\n' 'original bashrc' >"$TEST_ROOT/home/.bashrc"
 
 run_isolated_bootstrap() {
   DOTFILES_ACTIVATE_SETTINGS="$FIXTURE_BIN/activateSettings" \
+    DOTFILES_BREW="$FIXTURE_BIN/brew" \
     DOTFILES_DEFAULTS="$FIXTURE_BIN/defaults" \
     DOTFILES_HIDUTIL="$FIXTURE_BIN/hidutil" \
     DOTFILES_HOME="$TEST_ROOT/home" \
@@ -164,6 +181,10 @@ printf '%s\n' "$first_run_output" | grep -q 'input mode: ko-en'
 printf '%s\n' "$first_run_output" | grep -q 'backed up:.*\.bashrc'
 printf '%s\n' "$first_run_output" | grep -q 'linked:.*\.local/bin/gcloud-adc-account'
 printf '%s\n' "$first_run_output" | grep -q 'linked:.*\.config/helix'
+printf '%s\n' "$first_run_output" | grep -q 'linked:.*\.config/ghostty/config'
+printf '%s\n' "$first_run_output" | grep -q 'linked:.*\.config/ghostty/font.conf'
+printf '%s\n' "$first_run_output" | grep -q 'installed font cask: font-fira-code-nerd-font'
+printf '%s\n' "$first_run_output" | grep -q 'installed font cask: font-geist-mono-nerd-font'
 printf '%s\n' "$first_run_output" | grep -q 'unloaded LaunchAgent: dev.undervars.dotfiles.input-source-cycle'
 printf '%s\n' "$first_run_output" | grep -q 'removed:.*input-source-cycle.plist'
 printf '%s\n' "$first_run_output" | grep -q 'disabled input source: com.apple.keylayout.Dvorak'
@@ -195,6 +216,9 @@ second_run_output="$(run_isolated_bootstrap)"
 printf '%s\n' "$second_run_output" | grep -q 'unchanged:.*\.bashrc'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged:.*\.local/bin/gcloud-adc-account'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged:.*\.config/helix'
+printf '%s\n' "$second_run_output" | grep -q 'unchanged:.*\.config/ghostty/font.conf'
+printf '%s\n' "$second_run_output" | grep -q 'unchanged: font cask font-fira-code-nerd-font'
+printf '%s\n' "$second_run_output" | grep -q 'unchanged: font cask font-geist-mono-nerd-font'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: native previous-input-source hotkey bound to F18'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: LaunchAgent is loaded: dev.undervars.dotfiles.input-source-keys'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: right Command -> F18$'
@@ -230,6 +254,27 @@ grep -qx 'ko-en' "$TEST_ROOT/state/applied-sources"
 test ! -e "$switcher_target"
 test ! -e "$switcher_binary"
 cmp -s "$KEYS_KO_EN_PLIST" "$keys_target"
+
+# Switching the Ghostty font repoints the profile link. It has to survive being
+# switched back too: the link belongs to this repository, so it is replaced
+# rather than backed up, and a second switch would otherwise collide with the
+# backup the first one left behind.
+ghostty_font_link="$TEST_ROOT/home/.config/ghostty/font.conf"
+test "$(readlink "$ghostty_font_link")" = "$ROOT/config/ghostty/fonts/firacode.conf"
+
+geist_run_output="$(run_isolated_bootstrap --font geist)"
+printf '%s\n' "$geist_run_output" | grep -q 'ghostty font: geist'
+printf '%s\n' "$geist_run_output" | grep -q 'relinked:.*ghostty/font.conf'
+test "$(readlink "$ghostty_font_link")" = "$ROOT/config/ghostty/fonts/geist.conf"
+
+back_to_firacode_output="$(run_isolated_bootstrap)"
+printf '%s\n' "$back_to_firacode_output" | grep -q 'relinked:.*ghostty/font.conf'
+test "$(readlink "$ghostty_font_link")" = "$ROOT/config/ghostty/fonts/firacode.conf"
+test ! -e "$TEST_ROOT/state-home/dotfiles/backups/.config/ghostty/font.conf"
+
+# The included profile is resolved relative to the link, not to the file in the
+# repository, so the base config must ask for it by a bare relative name.
+grep -qx 'config-file = ?font.conf' "$TEST_ROOT/home/.config/ghostty/config"
 
 # Every apply re-asserts the typing defaults, so a machine where someone turned
 # one back on in System Settings is repaired rather than left alone.

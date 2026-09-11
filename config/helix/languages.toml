@@ -1,7 +1,7 @@
-# for all kinds of languages
-[language-config]
-auto-format = true
-indent = { tab-width = 4, unit = "    " }
+# There is no cross-language default in Helix: the file holds [[language]],
+# [language-server.*], and [[grammar]] entries only. A [language-config] table
+# asking for auto-format and a 4-space indent everywhere was ignored in
+# silence, so auto-format and indent are set per language below instead.
 
 # Rust
 [[language]]
@@ -30,10 +30,6 @@ inlayHints.closingBraceHints.enable = true
 [[language]]
 name = "go"
 language-servers = ["gopls", "golangci-lint-lsp"]
-
-[[language]]
-name = "json"
-formatter = { command = "prettier", args = ["--parser", "json"] }
 
 [[language]]
 name = "c"
@@ -139,7 +135,6 @@ name = "typescript"
 language-servers = [
     "typescript-language-server",
     "eslint",
-    "emmet-ls",
     "tailwindcss-ls",
 ]
 formatter = { command = "prettier", args = ["--parser", "typescript"] }
@@ -152,7 +147,6 @@ name = "tsx"
 language-servers = [
     "typescript-language-server",
     "eslint",
-    "emmet-ls",
     "tailwindcss-ls",
 ]
 formatter = { command = "prettier", args = ["--parser", "typescript"] }
@@ -164,7 +158,6 @@ name = "javascript"
 language-servers = [
     "typescript-language-server",
     "eslint",
-    "emmet-ls",
     "tailwindcss-ls",
 ]
 formatter = { command = "prettier", args = ["--parser", "typescript"] }
@@ -176,7 +169,6 @@ name = "jsx"
 language-servers = [
     "typescript-language-server",
     "eslint",
-    "emmet-ls",
     "tailwindcss-ls",
 ]
 formatter = { command = "prettier", args = ["--parser", "typescript"] }
@@ -191,14 +183,14 @@ auto-format = true
 
 [[language]]
 name = "html"
-language-servers = ["vscode-html-language-server", "emmet-ls", "tailwindcss-ls"]
+language-servers = ["vscode-html-language-server", "tailwindcss-ls"]
 formatter = { command = 'prettier', args = ["--parser", "html"] }
 # formatter = { command = 'dprint', args = ["--parser", "html"] }
 auto-format = true
 
 [[language]]
 name = "css"
-language-servers = ["vscode-css-language-server", "emmet-ls", "tailwindcss-ls"]
+language-servers = ["vscode-css-language-server", "tailwindcss-ls"]
 formatter = { command = 'prettier', args = ["--parser", "css"] }
 # formatter = { command = 'dprint', args = ["--parser", "css"] }
 auto-format = true

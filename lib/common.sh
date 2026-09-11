@@ -34,6 +34,23 @@ resolve_input_mode() {
   esac
 }
 
+# Both terminal fonts are installed on every machine; the choice only decides
+# which one config/ghostty/font.conf points at, so switching is one relink.
+DOTFILES_GHOSTTY_FONT_DEFAULT=firacode
+
+resolve_ghostty_font() {
+  local font="${DOTFILES_GHOSTTY_FONT:-$DOTFILES_GHOSTTY_FONT_DEFAULT}"
+
+  case "$font" in
+    firacode | geist)
+      printf '%s\n' "$font"
+      ;;
+    *)
+      die "unknown ghostty font: $font (expected firacode or geist)"
+      ;;
+  esac
+}
+
 require_command() {
   local command_path="$1"
   [ -x "$command_path" ] || die "required command is unavailable: $command_path"
@@ -94,12 +111,33 @@ ensure_symlink() {
   local backup_root="$state_home/dotfiles/backups"
   local relative_target
   local backup_path
+  local current_source
 
   [ -e "$source_path" ] || die "symlink source does not exist: $source_path"
 
   if [ -L "$target_path" ] && [ "$(readlink "$target_path")" = "$source_path" ]; then
     log "unchanged: $target_path -> $source_path"
     return 0
+  fi
+
+  # A link this repository made earlier is repointed rather than backed up. It
+  # is not the user's file, and backing it up would make switching a profile
+  # back and forth fail on the second switch, when the backup path is taken.
+  if [ -L "$target_path" ] && [ -n "${DOTFILES_ROOT:-}" ]; then
+    current_source="$(readlink "$target_path")"
+    case "$current_source" in
+      "$DOTFILES_ROOT"/*)
+        if is_dry_run; then
+          log "would relink: $target_path -> $source_path"
+          return 0
+        fi
+
+        rm "$target_path"
+        ln -s "$source_path" "$target_path"
+        log "relinked: $target_path -> $source_path"
+        return 0
+        ;;
+    esac
   fi
 
   if [ -e "$target_path" ] || [ -L "$target_path" ]; then

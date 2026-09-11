@@ -10,12 +10,14 @@ source "$DOTFILES_ROOT/lib/common.sh"
 
 usage() {
   cat <<'EOF'
-Usage: ./bootstrap.sh [--dry-run] [--mode <input-mode>]
+Usage: ./bootstrap.sh [--dry-run] [--mode <input-mode>] [--font <font>]
 
 Options:
   --dry-run       Report changes without writing them.
   --mode <mode>   macOS input mode: ko-en (default) or ko-en-ja.
                   DOTFILES_INPUT_MODE sets the same value.
+  --font <font>   Ghostty font: firacode (default) or geist.
+                  DOTFILES_GHOSTTY_FONT sets the same value.
   -h, --help      Show this help.
 EOF
 }
@@ -35,6 +37,14 @@ while [ "$#" -gt 0 ]; do
       [ "$#" -gt 0 ] || die "--mode requires a value"
       DOTFILES_INPUT_MODE="$1"
       ;;
+    --font=*)
+      DOTFILES_GHOSTTY_FONT="${1#*=}"
+      ;;
+    --font)
+      shift
+      [ "$#" -gt 0 ] || die "--font requires a value"
+      DOTFILES_GHOSTTY_FONT="$1"
+      ;;
     -h | --help)
       usage
       exit 0
@@ -47,9 +57,11 @@ while [ "$#" -gt 0 ]; do
 done
 
 DOTFILES_INPUT_MODE="$(resolve_input_mode)"
+DOTFILES_GHOSTTY_FONT="$(resolve_ghostty_font)"
 
 export DOTFILES_DRY_RUN
 export DOTFILES_INPUT_MODE
+export DOTFILES_GHOSTTY_FONT
 
 detect_platform() {
   case "$(uname -s)" in

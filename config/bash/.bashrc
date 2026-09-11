@@ -8,3 +8,7 @@ done
 if command -v starship &>/dev/null; then
     eval "$(starship init bash)"
 fi
+
+
+# Added by Antigravity CLI installer
+export PATH="/Users/x/.local/bin:$PATH"

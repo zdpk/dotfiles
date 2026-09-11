@@ -20,7 +20,7 @@ Apply the current platform configuration:
 
 `bootstrap.sh` runs `scripts/common/` first. It then detects macOS or Ubuntu and runs only that platform's numbered modules. Other Linux distributions fail explicitly.
 
-The existing files under `config/` remain the source for development-tool settings. The common module links Bash, Helix, WezTerm, and Zellij configuration. Existing conflicting paths are moved once to `~/.local/state/dotfiles/backups/` before linking.
+The existing files under `config/` remain the source for development-tool settings. The common module links Bash, Helix, WezTerm, Ghostty, and Zellij configuration. Existing conflicting paths are moved once to `~/.local/state/dotfiles/backups/` before linking. A link this repository made itself is repointed instead, so switching a profile back and forth does not collide with the backup left by the first switch.
 
 The repository is Bash-first. The former Nix configuration has been removed. Platform-specific automation belongs under `scripts/macos/` and `scripts/ubuntu/`.
 
@@ -209,6 +209,52 @@ Applications read these defaults when they launch, so already-running apps keep
 the old behavior until restarted. `setup-input-sources.sh` applies this module
 too, so a machine configured without the full bootstrap is not left behind.
 
+## Ghostty
+
+`config/ghostty/config` holds everything that does not depend on the machine.
+The font family is deliberately not in it: it lives in one of the profiles
+under `config/ghostty/fonts/`, and the common module links the selected one to
+`~/.config/ghostty/font.conf`.
+
+| Font | Family | Notes |
+| --- | --- | --- |
+| `firacode` (default) | FiraCode Nerd Font | |
+| `geist` | GeistMono Nerd Font | The face WezTerm already uses |
+
+Both Nerd Font casks are installed by the macOS fonts module regardless of the
+selection, so switching never needs a download first. Like the input mode, the
+choice is not stored in the repository, so pass it on each run:
+
+```bash
+./bootstrap.sh --font geist
+make setup FONT=geist
+DOTFILES_GHOSTTY_FONT=geist ./bootstrap.sh
+```
+
+Switching only repoints the link, so it takes effect on the next
+`Command-Shift-,` reload rather than needing a restart.
+
+Two details of Ghostty's configuration format are load-bearing here, and both
+fail quietly rather than loudly:
+
+`font-family` builds a fallback chain by repetition. A comma-separated list on
+one line — `font-family = "FiraCode Nerd Font", "Apple SD Gothic Neo"` — is
+read as a single family name that matches nothing, and Ghostty silently falls
+back to its built-in font, which is why each family gets its own line. Each
+profile ends with `Apple SD Gothic Neo` so Hangul does not land on whatever the
+system picks. No profile sets `font-family-bold`: both families ship real bold
+faces and Ghostty selects them from the family alone.
+
+A relative `config-file` resolves against the directory of the file that
+declares it, and Ghostty follows the symlink first, so `?font.conf` in the
+linked config resolves inside `~/.config/ghostty/` rather than inside this
+repository. That is what lets the profile be a second link instead of a
+generated file. The leading `?` suppresses the error on a machine that has the
+config but has not run the setup.
+
+`theme` names a built-in theme rather than a path into `Ghostty.app`, so the
+same file works on a Linux install.
+
 ## Ubuntu
 
 Ubuntu modules use the same ordered, idempotent execution contract. No Ubuntu-only settings are configured yet.
@@ -219,7 +265,7 @@ Ubuntu modules use the same ordered, idempotent execution contract. No Ubuntu-on
 ./tests/test.sh
 ```
 
-On macOS, the test checks Swift policy behavior, the release build, Bash syntax, LaunchAgent plists, HID usages per mode, common configuration links, backup behavior, and repeated bootstrap execution. It also drives a machine through `ko-en` -> `ko-en-ja` -> `ko-en` against stubbed system commands to confirm that each mode removes the other's artifacts. If `shellcheck` is installed, it runs automatically.
+On macOS, the test checks Swift policy behavior, the release build, Bash syntax, LaunchAgent plists, HID usages per mode, common configuration links, backup behavior, and repeated bootstrap execution. It also switches the Ghostty font profile out and back to confirm the link is repointed rather than backed up. Homebrew is stubbed there, so the suite never installs a cask. It also drives a machine through `ko-en` -> `ko-en-ja` -> `ko-en` against stubbed system commands to confirm that each mode removes the other's artifacts. If `shellcheck` is installed, it runs automatically.
 
 The suite never calls `--apply-sources` against the real machine; only the
 read-only `--check` runs there. Policy coverage lives in

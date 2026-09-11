@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+: "${DOTFILES_TEST_STATE:?}"
+
+case "${1:-} ${2:-}" in
+  'list --cask')
+    [ -f "$DOTFILES_TEST_STATE/cask-${3:-}" ]
+    ;;
+  'install --cask')
+    : >"$DOTFILES_TEST_STATE/cask-${3:-}"
+    ;;
+  *)
+    printf 'unexpected brew invocation: %s\n' "$*" >&2
+    exit 2
+    ;;
+esac
