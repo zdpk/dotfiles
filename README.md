@@ -26,93 +26,81 @@ The repository is Bash-first. The former Nix configuration has been removed. Pla
 
 ## macOS input-source keys
 
-Both modes use one small Swift helper, started at login by a user LaunchAgent.
-`hidutil` maps only physical right Command to F18. Carbon global hotkeys select
-an exact Text Input Source instead of cycling through recently used languages.
-
-- Right Command: Korean -> ABC; ABC, Japanese, or any other source -> Korean.
-- `ko-en-ja` only: Option+1 selects Japanese Romaji (Hiragana).
-- Right Command+Space cannot open Spotlight: the key is F18, not Command.
-  It still switches language on the right Command press; Space remains Space.
-- Left Command+Space remains the normal Spotlight shortcut. Both Option keys
-  remain modifiers. In `ko-en`, Option+1 keeps its ordinary application behavior.
-- Right Command is a dedicated language key, not a Command modifier for chords.
-
-The two modes declare different enabled keyboard sources:
-
-- `ko-en`: ABC and Korean 2-Set.
-- `ko-en-ja`: ABC, Korean 2-Set, and Japanese Romaji.
-
-Select once on each machine:
+The default is **right Command → F18 → macOS Korean/English switching**.
+Caps Lock is not involved. Runtime switching needs no third-party app or custom
+Swift helper. Setup uses the `osascript`, `hidutil`, `defaults`, and `launchctl`
+tools included with macOS; it does not require Python or Swift build tools.
 
 ```bash
-./setup-input-sources.sh --mode ko-en-ja   # current m1-pro: Japanese enabled
-./setup-input-sources.sh --mode ko-en      # m5-air: Korean/English only
+make input-sources-dry-run  # inspect the planned changes
+make input-sources          # apply now and restore the mapping at login
+make input-sources-status   # read configuration checks
+make input-sources-restore  # restore the keyboard configuration saved before setup
 ```
 
-Successful installation saves the mode in `~/.config/dotfiles/input-mode`,
-outside this repository. Later `make input-sources` or `make setup` preserves
-it. Priority is `--mode` / `MODE=...`, then `DOTFILES_INPUT_MODE`, then the saved
-file, then `ko-en`. Dry runs never save a mode.
+`./bootstrap.sh` applies the same native configuration on macOS. Ubuntu does not
+run keyboard modules. The input-only command does not link shell, terminal, or
+editor files.
 
-The input-only entrypoint migrates Hammerspoon and applies typing defaults;
-it does not link shell, terminal, or editor configuration. The full bootstrap
-runs keyboard modules only on macOS. Swift build tools are required on each Mac.
+- Only ABC and Korean 2-Set are enabled as selectable keyboard sources.
+- Right Command becomes a dedicated language key. It no longer acts as Command
+  in shortcuts, so right Command+Space cannot invoke Command+Space Spotlight.
+- Left Command and both Option keys retain their roles. There is no Option+1
+  Japanese shortcut. Caps Lock settings and unrelated HID mappings are preserved.
+- The previous-source shortcut is disabled. The next-source shortcut is F18.
+  With exactly two sources, it toggles Korean/English.
 
-```bash
-make input-sources-dry-run
-make input-sources
-```
+Apply backs up the original source list, selected source, affected shortcuts,
+LaunchAgents, HID mappings, and saved node configuration. It stops the old
+dotfiles switcher and an active supported Karabiner user core before assigning
+F18 to macOS. Fcitx keyboard sources are disabled and its process is stopped.
+A running Hammerspoon must be quit before setup.
+Some existing third-party sources can resist API removal. Setup then fails and
+rolls back instead of ignoring the remaining source. Remove that source once in
+System Settings → Keyboard → Text Input → Edit, then apply again. This was
+required for the experimental Fcitx entry on m1 (macOS 26.6.2).
 
-The installer enables the mode's sources and disables undeclared keyboard
-sources. Palette sources are preserved. It clears the old native input shortcut
-so F18 has exactly one owner, replaces the old right Option -> F19 mapping, and
-reloads the helper when either its binary or mode changes.
+The native backend and `ko-en` mode are saved in `~/.config/dotfiles/`, outside
+the checkout. Applying native mode on a node with the old Japanese profile
+replaces that active profile with Korean/English; restore recovers the previous
+profile. Reapplying an already-correct configuration does not restart services
+or replace the first backup.
 
-The hardware mapping owns the complete `hidutil` UserKeyMapping array.
+The installed login job runs `/usr/bin/hidutil` once and exits. It references no
+checkout path and keeps no custom process running. Apple documents that HID
+mappings disappear on restart or keyboard-service removal. The job reapplies
+at login; run `make input-sources` after reconnecting a keyboard if needed.
 [Apple TN2450](https://developer.apple.com/library/archive/technotes/tn2450/_index.html)
-documents that mappings are lost at restart or when the keyboard service is
-removed. The login agent restores them at login; reapply `make input-sources`
-after attaching a keyboard if its mapping is missing. Mapping readback does not
-prove physical-key behavior. Test actual composition and Secure Input on each
-Mac after installation or an OS upgrade.
 
-`com.apple.symbolichotkeys` and `activateSettings -u` are undocumented migration
-interfaces used to disable the previous implementation's shortcut. Runtime
-switching uses Carbon and Text Input Source APIs, not that preference format.
+Backup and recovery state live in `~/.local/state/dotfiles/native-input/`.
+Interrupted or incomplete changes retain that backup and require
+`make input-sources-restore` before another apply. macOS may request approval
+when restoring a previously enabled third-party input method; complete that
+system prompt and rerun restore. Recovery merges shortcuts 60/61 with the current
+preferences, preserving unrelated shortcuts changed since installation.
+The separate text-input defaults described below are outside keyboard rollback.
 
-### Diagnose an intermittent missed switch
+**This makes the agreed configuration repeatable; it does not fix the known
+rapid-switching IME bug.** Native F18 switching reproduced wrong initial Korean
+letters in WebKit on m5. Passing configuration checks is not proof that menu
+state and actual composition always agree. See the
+[native setup design and validation](docs/plans/2026-09-13-native-input-setup-design.md).
+`com.apple.symbolichotkeys` and `activateSettings -u` are macOS implementation
+details and may need adjustment after an OS update.
+
+### Legacy Swift configuration
+
+The old helper remains available explicitly:
 
 ```bash
-make input-diagnostics
-./script/input-source-diagnostics.sh --follow
+make input-sources-restore
+make input-sources BACKEND=helper MODE=ko-en-ja
 ```
 
-These commands inspect the installed service without restarting it. The helper
-records a small sequence of events through Apple's unified log, under subsystem
-`dev.undervars.dotfiles.input-source-switcher`, category `Switching`:
-
-- `switch`: received hotkey, source before/target/immediate readback, selection
-  API time (`api_us`), time through selection (`handler_us`), event delivery delay
-  (`queue_us`), sampled modifiers and Secure Input status.
-- `up`: key release and held duration.
-- `down_ignored`: a repeated press was rejected because release was not observed.
-  This can also be ordinary key repeat; it alone does not prove a lost release.
-- `source_changed`: macOS selection notification, correlated by timestamp.
-  Other applications can also change the source. Duplicate notifications can
-  report the same current source and do not imply another switch.
-- `switch_failed`: input-source selection returned an error.
-
-Only registered language hotkeys and source IDs are recorded, never typed text,
-document contents, or general keystrokes. Logs are subject to macOS retention.
-Source readback does not prove usable composition, and API timing is not the
-full physical-key-to-screen latency. If a physical press has no log, compare its
-time with the service/mapping snapshot and any held modifier keys.
-
-Selection remains immediate. Logging and readback happen after selection; there
-are no retry timers, polling loops, synthetic keystrokes, or delayed replays.
-The diagnostic build preserves the existing press/release suppression behavior
-so evidence can be collected before changing it.
+This builds the old Swift helper and restores the prior Option+1 Japanese policy.
+Swift build tools are required only for that backend. `make input-diagnostics`
+and its switch-event logs describe this legacy helper; use
+`make input-sources-status` for the native backend.
 
 ## macOS text input
 

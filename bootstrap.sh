@@ -10,10 +10,12 @@ source "$DOTFILES_ROOT/lib/common.sh"
 
 usage() {
   cat <<'EOF'
-Usage: ./bootstrap.sh [--dry-run] [--mode <input-mode>] [--font <font>]
+Usage: ./bootstrap.sh [--dry-run] [--backend <backend>] [--mode <input-mode>] [--font <font>]
 
 Options:
   --dry-run       Report changes without writing them.
+  --backend <b>   native (default): macOS F18 cycle, no helper app or Caps Lock.
+                  helper: legacy Swift Korean/English/Japanese switcher.
   --mode <mode>   macOS input mode: ko-en (default) or ko-en-ja.
                   DOTFILES_INPUT_MODE overrides the saved per-machine mode.
   --font <font>   Ghostty font: firacode (default) or geist.
@@ -28,6 +30,12 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --dry-run)
       DOTFILES_DRY_RUN=1
+      ;;
+    --backend=*) DOTFILES_INPUT_BACKEND="${1#*=}" ;;
+    --backend)
+      shift
+      [ "$#" -gt 0 ] || die "--backend requires a value"
+      DOTFILES_INPUT_BACKEND="$1"
       ;;
     --mode=*)
       DOTFILES_INPUT_MODE="${1#*=}"
@@ -56,6 +64,8 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
+DOTFILES_INPUT_BACKEND="$(resolve_input_backend)"
+export DOTFILES_INPUT_BACKEND
 DOTFILES_INPUT_MODE="$(resolve_input_mode)"
 DOTFILES_GHOSTTY_FONT="$(resolve_ghostty_font)"
 

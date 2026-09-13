@@ -14,6 +14,10 @@ TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-tests.XXXXXX")"
 
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
+node --test "$ROOT/tests/native-input.test.cjs"
+# The existing fixture suite below covers the retained Swift backend explicitly.
+export DOTFILES_INPUT_BACKEND=helper
+
 mkdir -p \
   "$TEST_ROOT/home/Library/LaunchAgents" \
   "$TEST_ROOT/state" \

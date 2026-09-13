@@ -7,6 +7,17 @@ set -euo pipefail
 # shellcheck source=../../lib/common.sh
 source "$DOTFILES_ROOT/lib/common.sh"
 
+if [ "$(resolve_input_backend)" = native ]; then
+  # No custom process participates in switching. The login job runs hidutil once.
+  resolve_input_mode >/dev/null
+  action=apply
+  if is_dry_run; then action=dry-run; fi
+  exec bash "$DOTFILES_ROOT/script/native-input.sh" "$action"
+fi
+if [ -f "${DOTFILES_STATE_HOME:-${DOTFILES_HOME:-$HOME}/.local/state}/dotfiles/native-input/backup.json" ]; then
+  die "restore the native configuration with make input-sources-restore before selecting the legacy helper"
+fi
+
 ACTIVATE_SETTINGS="${DOTFILES_ACTIVATE_SETTINGS:-/System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings}"
 DEFAULTS="${DOTFILES_DEFAULTS:-/usr/bin/defaults}"
 HIDUTIL="${DOTFILES_HIDUTIL:-/usr/bin/hidutil}"
@@ -348,5 +359,6 @@ if is_dry_run; then
 else
   mkdir -p "$(dirname "$mode_file")"
   printf '%s\n' "$INPUT_MODE" >"$mode_file"
+  printf '%s\n' helper >"$HOME_DIR/.config/dotfiles/input-backend"
   log "saved input mode: $INPUT_MODE"
 fi

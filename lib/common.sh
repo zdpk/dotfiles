@@ -21,12 +21,32 @@ is_dry_run() {
 # the two-language layout; the three-language layout is opt-in per machine.
 DOTFILES_INPUT_MODE_DEFAULT=ko-en
 
+resolve_input_backend() {
+  local backend="${DOTFILES_INPUT_BACKEND-native}"
+  local backend_file="${DOTFILES_HOME:-$HOME}/.config/dotfiles/input-backend"
+  if [ "${DOTFILES_INPUT_BACKEND+x}" != x ] && [ -f "$backend_file" ]; then
+    backend="$(cat "$backend_file")"
+  fi
+  case "$backend" in
+    native | helper) printf '%s\n' "$backend" ;;
+    *) die "unknown input backend: $backend (expected native or helper)" ;;
+  esac
+}
+
 resolve_input_mode() {
   local mode="${DOTFILES_INPUT_MODE-$DOTFILES_INPUT_MODE_DEFAULT}"
   local mode_file="${DOTFILES_HOME:-$HOME}/.config/dotfiles/input-mode"
 
-  if [ "${DOTFILES_INPUT_MODE+x}" != x ] && [ -f "$mode_file" ]; then
+  if [ "${DOTFILES_INPUT_MODE+x}" != x ] && [ "$(resolve_input_backend)" = native ]; then
+    # The native cycle must have exactly two sources, even when this node used
+    # the old Japanese helper profile. Apply backs up that previous selection.
+    mode=ko-en
+  elif [ "${DOTFILES_INPUT_MODE+x}" != x ] && [ -f "$mode_file" ]; then
     mode="$(cat "$mode_file")"
+  fi
+
+  if [ "$(resolve_input_backend)" = native ] && [ "$mode" != ko-en ]; then
+    die "native input supports only ko-en; --backend helper is required for legacy ko-en-ja"
   fi
 
   case "$mode" in
