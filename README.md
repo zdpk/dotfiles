@@ -184,6 +184,20 @@ config but has not run the setup.
 `theme` names a built-in theme rather than a path into `Ghostty.app`, so the
 same file works on a Linux install.
 
+## Browsers
+
+The macOS browsers module installs the stable, Beta, and Dev channels of Google
+Chrome as the `google-chrome`, `google-chrome@beta`, and `google-chrome@dev`
+casks. Each channel is its own app bundle, so all three sit side by side in
+`/Applications`. A cask that is already installed is left alone; Chrome updates
+itself, so the setup never upgrades it.
+
+Casks are installed with `--adopt`. A Chrome installed earlier from Google's
+DMG already occupies the target path, and without it the install would abort
+the bootstrap. The Chrome casks are marked `auto_updates`, so Homebrew adopts
+the existing bundle as is rather than requiring its version to match the cask.
+Like the fonts, the module warns and skips when Homebrew is not installed.
+
 ## Ubuntu
 
 Ubuntu modules use the same ordered, idempotent execution contract. No Ubuntu-only settings are configured yet.

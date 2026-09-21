@@ -9,7 +9,8 @@ case "${1:-} ${2:-}" in
     [ -f "$DOTFILES_TEST_STATE/cask-${3:-}" ]
     ;;
   'install --cask')
-    : >"$DOTFILES_TEST_STATE/cask-${3:-}"
+    # The cask is the last argument so options such as --adopt can precede it.
+    printf '%s\n' "$*" >"$DOTFILES_TEST_STATE/cask-${!#}"
     ;;
   *)
     printf 'unexpected brew invocation: %s\n' "$*" >&2
