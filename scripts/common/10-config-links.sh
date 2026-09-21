@@ -24,3 +24,4 @@ ensure_symlink "$DOTFILES_ROOT/config/ghostty/config" "$CONFIG_HOME/ghostty/conf
 # live next to the link rather than next to the file in the repository.
 ensure_symlink "$DOTFILES_ROOT/config/ghostty/fonts/$GHOSTTY_FONT.conf" "$CONFIG_HOME/ghostty/font.conf"
 ensure_symlink "$DOTFILES_ROOT/config/zellij/config.kdl" "$CONFIG_HOME/zellij/config.kdl"
+ensure_symlink "$DOTFILES_ROOT/config/antigravity" "$CONFIG_HOME/antigravity"

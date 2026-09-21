@@ -1,0 +1,9 @@
+{
+  "name": "openai",
+  "description": "ChatGPT Desktop Dark Theme (Pitch Charcoal / Monochrome)",
+  "customThemeSeedsDark": {
+    "background": "#181818",
+    "foregroundOverride": "#EDEDED",
+    "primary": "#EDEDED"
+  }
+}

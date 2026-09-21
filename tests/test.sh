@@ -118,6 +118,8 @@ printf '%s\n' "$default_dry_run_output" | grep -q 'would install font cask: font
 printf '%s\n' "$default_dry_run_output" | grep -q 'would install browser cask: google-chrome$'
 printf '%s\n' "$default_dry_run_output" | grep -q 'would install browser cask: google-chrome@beta$'
 printf '%s\n' "$default_dry_run_output" | grep -q 'would install browser cask: google-chrome@dev$'
+printf '%s\n' "$default_dry_run_output" | grep -q 'would install antigravity cask: antigravity'
+printf '%s\n' "$default_dry_run_output" | grep -q 'would apply antigravity theme: openai'
 printf '%s\n' "$default_dry_run_output" | grep -q 'would apply input sources for mode: ko-en'
 printf '%s\n' "$default_dry_run_output" | grep -Eq 'right Command -> F18$|would apply right Command -> F18$'
 ! printf '%s\n' "$default_dry_run_output" | grep -q 'right Option -> F19'
@@ -196,8 +198,10 @@ printf '%s\n' "$first_run_output" | grep -q 'installed font cask: font-geist-mon
 printf '%s\n' "$first_run_output" | grep -q 'installed browser cask: google-chrome$'
 printf '%s\n' "$first_run_output" | grep -q 'installed browser cask: google-chrome@beta$'
 printf '%s\n' "$first_run_output" | grep -q 'installed browser cask: google-chrome@dev$'
+printf '%s\n' "$first_run_output" | grep -q 'installed antigravity cask: antigravity'
+printf '%s\n' "$first_run_output" | grep -q 'applied antigravity theme: openai'
 # A Chrome installed from Google's DMG must be adopted rather than abort setup.
-for browser_cask in google-chrome google-chrome@beta google-chrome@dev; do
+for browser_cask in google-chrome google-chrome@beta google-chrome@dev antigravity; do
   grep -q -- '--adopt' "$TEST_ROOT/state/cask-$browser_cask"
 done
 printf '%s\n' "$first_run_output" | grep -q 'unloaded LaunchAgent: dev.undervars.dotfiles.input-source-cycle'
@@ -235,6 +239,8 @@ printf '%s\n' "$second_run_output" | grep -q 'unchanged: font cask font-geist-mo
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: browser cask google-chrome$'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: browser cask google-chrome@beta$'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: browser cask google-chrome@dev$'
+printf '%s\n' "$second_run_output" | grep -q 'unchanged: antigravity cask antigravity'
+printf '%s\n' "$second_run_output" | grep -q 'unchanged: antigravity theme openai'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: native previous-input-source hotkey disabled'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: LaunchAgent is loaded: dev.undervars.dotfiles.input-source-keys'
 printf '%s\n' "$second_run_output" | grep -q 'unchanged: right Command -> F18$'
@@ -340,6 +346,7 @@ test -L "$TEST_ROOT/home/.bashrc"
 test -L "$TEST_ROOT/home/.local/bin/gcloud-adc-account"
 test -L "$TEST_ROOT/home/.config/bash/alias.sh"
 test -L "$TEST_ROOT/home/.config/helix"
+test -L "$TEST_ROOT/home/.config/antigravity"
 grep -q 'original bashrc' "$TEST_ROOT/state-home/dotfiles/backups/.bashrc"
 
 input_only_dry_run_output="$(
