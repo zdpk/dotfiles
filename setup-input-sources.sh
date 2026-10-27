@@ -12,17 +12,17 @@ usage() {
   cat <<'EOF'
 Usage: ./setup-input-sources.sh [--dry-run] [--backend <backend>] [--mode <input-mode>]
 
-Configures right Command as a dedicated Korean/English key, using macOS's
-native F18 input-source shortcut, and applies the related typing defaults. No
+Configures right Command as a dedicated Korean/English key and applies the
+related typing defaults. The helper backend also supports Japanese via Globe. No
 shell, editor, terminal, or multiplexer configuration is linked.
 
 Options:
   --dry-run       Report changes without writing them.
   --backend <b>   native (default): no helper app, Caps Lock, or Japanese shortcut.
-                  helper: retain the legacy Swift implementation.
+                  helper: Swift handles right Command; macOS handles Globe.
   --mode <mode>   ko-en    right Command switches English/Korean (default)
-                  ko-en-ja right Command switches English/Korean and
-                           Option+1 switches to Japanese
+                  ko-en-ja Globe cycles ABC/Korean/Japanese; right Command
+                           toggles English/Korean and returns Japanese to Korean.
                   DOTFILES_INPUT_MODE overrides the saved per-machine mode.
   -h, --help      Show this help.
 EOF

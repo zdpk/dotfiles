@@ -88,19 +88,51 @@ state and actual composition always agree. See the
 `com.apple.symbolichotkeys` and `activateSettings -u` are macOS implementation
 details and may need adjustment after an OS update.
 
-### Legacy Swift configuration
+### Swift helper with Japanese
 
-The old helper remains available explicitly:
+Use the helper backend when Globe should cycle ABC, Korean 2-Set, and Japanese
+while right Command stays a dedicated Korean/English key:
 
 ```bash
 make input-sources-restore
 make input-sources BACKEND=helper MODE=ko-en-ja
 ```
 
-This builds the old Swift helper and restores the prior Option+1 Japanese policy.
-Swift build tools are required only for that backend. `make input-diagnostics`
-and its switch-event logs describe this legacy helper; use
-`make input-sources-status` for the native backend.
+Restore is needed only when a native installation backup exists. This builds
+the existing Swift helper and saves `helper` / `ko-en-ja` under
+`~/.config/dotfiles/`. Later bootstrap and input-only runs retain that machine's
+selection. Fresh machines still default to native Korean/English.
+
+- Globe/Fn uses macOS Change Input Source and cycles all three languages.
+- Right Command maps to F18. The helper selects the native input-menu item
+  through Swift AX: Korean from ABC/Japanese, and ABC from Korean. It never
+  selects Japanese and never primes a switch through an intermediate source.
+- Only F18 is registered by the helper. Option+1 and both Option keys retain
+  their normal roles; Japanese is selected through Globe or the Input menu.
+- macOS shortcuts 60/61 are disabled so F18 has one owner. Left Command+Space
+  retains Spotlight. The helper starts automatically through a LaunchAgent.
+
+Swift build tools and Accessibility access for the installed
+`~/Library/Application Support/dev.undervars.dotfiles/bin/input-source-switcher`
+are required for this backend. A rebuilt ad-hoc executable may need its existing
+Accessibility entry removed and re-added, followed by a helper restart. The
+resident `ready` log must say `accessibility=true`; a CLI process can inherit
+its terminal's access and is not proof of the login helper's permission.
+
+`make input-sources-status`
+reads the saved backend; `make input-diagnostics` shows helper switch logs.
+Status includes the current keyboard layout and input-method override.
+The direct TIS activation path produced a confirmed Korean-mode/ABC-layout
+mismatch. The native-menu replacement passed repeated front-app layout checks and the
+user's physical-key acceptance on 2026-10-27. The owned verification app recorded
+227 physical key-down events across the three sources, with no Korean/ABC layout
+mismatch; the helper recorded 66 switch requests without errors. The user
+confirmed Globe's three-language cycle and the right-Command policy. These checks
+cover the current Mac and verification session. The failed native-bounce repair
+remains withdrawn. See the
+[physical-key diagnosis](docs/plans/2026-10-27-right-command-layout-desync.md).
+Source/layout readback confirms configuration, not error-free IME composition during
+rapid typing. See the [Globe/helper design](docs/plans/2026-10-27-globe-helper-design.md).
 
 ## macOS text input
 

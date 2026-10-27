@@ -20,6 +20,34 @@ var NativeInput = (function () {
         return value;
     }
     function same(a, b) { return JSON.stringify(stable(a)) === JSON.stringify(stable(b)); }
+    // Newer hidutil versions print a mapping for each HID service. Null entries
+    // include non-keyboard services; reject differing active maps rather than
+    // choosing one arbitrarily and losing device-specific mappings on restore.
+    function readHIDMapping(text, decode) {
+        text = text.trim().replace(/^RegistryID\s+Key\s+Value\s*\n/, '');
+        var parts;
+        if (text.charAt(0) === '(') parts = [text];
+        else {
+            parts = text.split(/^[0-9a-fx]+\s+UserKeyMapping\s+/mi);
+            if (parts.shift().trim() !== '' || !parts.length) throw new Error('Unknown hidutil mapping format');
+        }
+        var mapping = null;
+        parts.forEach(function (part) {
+            part = part.trim();
+            if (part === '(null)') return;
+            var rows = decode(part);
+            if (!Array.isArray(rows)) throw new Error('Unknown hidutil mapping format');
+            rows = rows.map(function (row) {
+                var src = Number(row.HIDKeyboardModifierMappingSrc);
+                var dst = Number(row.HIDKeyboardModifierMappingDst);
+                if (!Number.isSafeInteger(src) || !Number.isSafeInteger(dst)) throw new Error('Invalid HID mapping');
+                return {HIDKeyboardModifierMappingSrc: src, HIDKeyboardModifierMappingDst: dst};
+            });
+            if (mapping !== null && !same(mapping, rows)) throw new Error('Different HID mappings across devices; inspect before changing them.');
+            mapping = rows;
+        });
+        return mapping || [];
+    }
     function sorted(a) { return a.slice().sort(); }
     function mapping(before) {
         return before.filter(function (row) {
@@ -116,7 +144,8 @@ var NativeInput = (function () {
         } finally { sys.unlock(); }
     }
     return {ABC: ABC, KOREAN: KOREAN, SOURCES: SOURCES, KEYS: KEYS, OWNERS: OWNERS,
-        HOTKEY: HOTKEY, mapping: mapping, hotkeys: hotkeys, checks: checks, all: all, same: same, execute: execute};
+        HOTKEY: HOTKEY, mapping: mapping, hotkeys: hotkeys, checks: checks, all: all, same: same,
+        readHIDMapping: readHIDMapping, execute: execute};
 }());
 
 function macRuntime() {
@@ -194,13 +223,7 @@ function macRuntime() {
     }
     function getMapping() {
         var text = must('/usr/bin/hidutil', ['property', '--get', 'UserKeyMapping']).trim();
-        if (text === '(null)') return [];
-        var rows = parsePlist(text);
-        if (!Array.isArray(rows)) throw new Error('Unknown hidutil mapping format');
-        return rows.map(function (row) {
-            return {HIDKeyboardModifierMappingSrc: Number(row.HIDKeyboardModifierMappingSrc),
-                HIDKeyboardModifierMappingDst: Number(row.HIDKeyboardModifierMappingDst)};
-        });
+        return NativeInput.readHIDMapping(text, parsePlist);
     }
     // Each short setup operation gets a new TIS client. TIS's process-local
     // source cache can remain stale even when its mutation has already succeeded.

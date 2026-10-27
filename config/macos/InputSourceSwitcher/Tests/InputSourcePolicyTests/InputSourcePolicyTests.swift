@@ -1,6 +1,47 @@
 import InputSourcePolicy
 import Testing
 
+@Test("Native input-source section excludes Korean's separate ABC command")
+func nativeSourceSection() {
+    // Captured from TextInputMenuAgent during a failed native-menu trial.
+    let menu = ["ABC", "Japanese", "2-Set Korean", "", "ABC", "Edit Hanja Dictionary"]
+    #expect(InputSourcePolicy.nativeMenuSourceIndex(itemTitles: menu, localizedName: "ABC") == 0)
+    #expect(InputSourcePolicy.nativeMenuSourceIndex(itemTitles: menu, localizedName: "2-Set Korean") == 2)
+    #expect(InputSourcePolicy.nativeMenuSourceIndex(
+        itemTitles: ["Loading…", "", "ABC"], localizedName: "ABC"
+    ) == nil)
+    #expect(InputSourcePolicy.nativeMenuSourceIndex(
+        itemTitles: ["ABC", "ABC", ""], localizedName: "ABC"
+    ) == nil)
+    #expect(InputSourcePolicy.nativeMenuSourceIndex(
+        itemTitles: ["ABC", "일본어", "두벌식", "", "ABC"], localizedName: "두벌식"
+    ) == 2)
+}
+
+@Test("Korean selection requires the Korean physical-key layout")
+func koreanLayoutAgreement() {
+    #expect(!InputSourcePolicy.selectionMatches(
+        .korean,
+        sourceID: PrimaryInputSource.korean.rawValue,
+        layoutID: PrimaryInputSource.english.rawValue
+    ))
+    #expect(InputSourcePolicy.selectionMatches(
+        .korean,
+        sourceID: PrimaryInputSource.korean.rawValue,
+        layoutID: "com.apple.keylayout.2SetHangul"
+    ))
+    #expect(InputSourcePolicy.selectionMatches(
+        .english,
+        sourceID: PrimaryInputSource.english.rawValue,
+        layoutID: PrimaryInputSource.english.rawValue
+    ))
+    #expect(!InputSourcePolicy.selectionMatches(
+        .english,
+        sourceID: PrimaryInputSource.korean.rawValue,
+        layoutID: PrimaryInputSource.english.rawValue
+    ))
+}
+
 @Test("Right Command toggles English and Korean")
 func primaryToggle() {
     #expect(

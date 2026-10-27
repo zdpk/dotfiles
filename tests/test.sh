@@ -77,6 +77,14 @@ release_bin_dir="$(/usr/bin/xcrun swift build \
   --package-path "$PACKAGE" \
   --configuration release \
   --show-bin-path)"
+# A fresh TIS active-source query must not contain inactive modes exposed by
+# an earlier includeAll catalog lookup. Compare independent read-only clients.
+swift_active_sources="$("$release_bin_dir/input-source-switcher" _source list)"
+native_source_catalog="$(/usr/bin/osascript -l JavaScript "$ROOT/scripts/macos/native-input.js" _source list)"
+node -e 'const assert = require("node:assert/strict");
+  const swift = JSON.parse(process.argv[1]).sort();
+  const native = JSON.parse(process.argv[2]).sources.filter(s => s.enabled).map(s => s.id).sort();
+  assert.deepEqual(swift, native);' "$swift_active_sources" "$native_source_catalog"
 # --check is read-only, so it can run against the real machine when the sources
 # it needs happen to be enabled. --apply-sources is never exercised here.
 enabled_sources="$(/usr/bin/defaults read com.apple.HIToolbox AppleEnabledInputSources 2>/dev/null || true)"
@@ -218,6 +226,8 @@ test -x "$switcher_binary"
 grep -q -- '--run ko-en</string>' "$switcher_target"
 cmp -s "$KEYS_KO_EN_PLIST" "$keys_target"
 grep -qx 'false 49 262144' "$TEST_ROOT/state/hotkey-60"
+grep -qx 'false 79 8388608' "$TEST_ROOT/state/hotkey-61"
+grep -qx 1 "$TEST_ROOT/state/globe"
 grep -qx 'ko-en' "$TEST_ROOT/home/.config/dotfiles/input-mode"
 # Text substitutions rewrite what was typed, so the setup turns each one off
 # explicitly rather than inheriting the machine default.

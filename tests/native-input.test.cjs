@@ -7,6 +7,20 @@ const path = require('node:path');
 const input = require('../scripts/macos/native-input.js');
 const copy = value => JSON.parse(JSON.stringify(value));
 
+test('HID readback supports both a shared plist and per-service macOS output', () => {
+    const rows = [{HIDKeyboardModifierMappingSrc: 30064771303, HIDKeyboardModifierMappingDst: 30064771181}];
+    const plain = '(\n    { HIDKeyboardModifierMappingSrc = 30064771303; HIDKeyboardModifierMappingDst = 30064771181; }\n)';
+    const decode = text => { assert.equal(text, plain); return copy(rows); };
+    assert.deepEqual(input.readHIDMapping(plain, decode), rows);
+    assert.deepEqual(input.readHIDMapping('RegistryID  Key                   Value\n100000abc UserKeyMapping ' + plain +
+        '\n100000def UserKeyMapping (null)\n100000123 UserKeyMapping ' + plain, decode), rows);
+    assert.deepEqual(input.readHIDMapping('(null)', decode), []);
+    assert.deepEqual(input.readHIDMapping('100000abc UserKeyMapping (null)', decode), []);
+    assert.throws(() => input.readHIDMapping('unexpected output', decode), /Unknown hidutil/);
+    assert.throws(() => input.readHIDMapping('100000abc UserKeyMapping ' + plain +
+        '\n100000def UserKeyMapping ()', text => text === '()' ? [] : rows), /Different HID mappings/);
+});
+
 function fixture() {
     const state = {
         sources: [...input.SOURCES, 'Japanese', 'Fcitx'], selected: 'Japanese',

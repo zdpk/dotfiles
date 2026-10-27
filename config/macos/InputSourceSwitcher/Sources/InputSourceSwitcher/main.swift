@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Carbon
 import Foundation
 import InputSourcePolicy
@@ -11,29 +12,16 @@ private let diagnostics = Logger(
 
 private enum HotKey: UInt32 {
     case primary = 1
-    case japanese = 2
 
-    var virtualKeyCode: UInt32 {
-        switch self {
-        case .primary:
-            return UInt32(kVK_F18)
-        case .japanese:
-            return UInt32(kVK_ANSI_1)
-        }
-    }
-
-    var modifiers: UInt32 {
-        self == .japanese ? UInt32(optionKey) : 0
-    }
-
-    var name: String {
-        self == .primary ? "primary" : "japanese"
-    }
+    var virtualKeyCode: UInt32 { UInt32(kVK_F18) }
+    var modifiers: UInt32 { 0 }
+    var name: String { "primary" }
 }
 
 private enum SwitcherError: Error, CustomStringConvertible {
     case missingInputSource(String)
     case carbonCall(String, OSStatus)
+    case sourceSetup(String)
 
     var description: String {
         switch self {
@@ -41,6 +29,8 @@ private enum SwitcherError: Error, CustomStringConvertible {
             return "required input source is not enabled: \(sourceID)"
         case let .carbonCall(name, status):
             return "\(name) failed with OSStatus \(status)"
+        case let .sourceSetup(message):
+            return message
         }
     }
 }
@@ -84,40 +74,51 @@ private enum InputSourceCatalog {
         return sourceIDs
     }
 
-    /// Enables everything the mode declares, then removes any other enabled
-    /// keyboard source. Enabling runs first so macOS always has a source to fall
-    /// back on when the previous selection is disabled.
+    /// TIS caches its includeAll catalog and can return inactive modes in a
+    /// later includeAll=false query in the same process. Use a fresh client for
+    /// each setup operation; the resident switching path never spawns processes.
     static func applySources(mode: InputMode) throws -> [String] {
-        let installedSources = sourcesByID()
-
         for sourceID in InputSourcePolicy.requiredSourceIDs(for: mode) {
-            guard let source = installedSources[sourceID] else {
-                throw SwitcherError.missingInputSource(sourceID)
-            }
-            guard !isEnabled(source) else {
-                continue
-            }
-            let status = TISEnableInputSource(source)
-            guard status == noErr else {
-                throw SwitcherError.carbonCall("TISEnableInputSource", status)
-            }
+            _ = try sourceTool(["_source", "enable", sourceID])
         }
-
+        let data = Data(try sourceTool(["_source", "list"]).utf8)
+        let enabled = try JSONDecoder().decode([String].self, from: data)
         let removable = InputSourcePolicy.sourceIDsToDisable(
-            enabledKeyboardSourceIDs: enabledKeyboardSourceIDs(),
+            enabledKeyboardSourceIDs: enabled,
             mode: mode
         )
-
         for sourceID in removable {
-            guard let source = installedSources[sourceID] else {
-                continue
-            }
-            let status = TISDisableInputSource(source)
-            guard status == noErr else {
-                throw SwitcherError.carbonCall("TISDisableInputSource", status)
-            }
+            _ = try sourceTool(["_source", "disable", sourceID])
         }
         return removable
+    }
+
+    private static func sourceTool(_ arguments: [String]) throws -> String {
+        let task = Process()
+        task.executableURL = Bundle.main.executableURL
+        task.arguments = arguments
+        let output = Pipe()
+        task.standardOutput = output
+        try task.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        guard task.terminationStatus == 0 else {
+            throw SwitcherError.sourceSetup("input-source setup failed: \(arguments.joined(separator: " "))")
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    static func setEnabled(_ sourceID: String, enabled: Bool) throws {
+        // Capture effective sources BEFORE asking TIS for its includeAll list.
+        let active = Set(enabledKeyboardSourceIDs())
+        guard let source = sourcesByID()[sourceID], isKeyboardSource(source) else {
+            throw SwitcherError.missingInputSource(sourceID)
+        }
+        guard active.contains(sourceID) != enabled else { return }
+        let status = enabled ? TISEnableInputSource(source) : TISDisableInputSource(source)
+        guard status == noErr else {
+            throw SwitcherError.carbonCall(enabled ? "TISEnableInputSource" : "TISDisableInputSource", status)
+        }
     }
 
     static func stringProperty(
@@ -151,17 +152,29 @@ private enum InputSourceCatalog {
     }
 }
 
+private extension InputSourceCatalog {
+    static var currentKeyboardLayoutID: String {
+        let layout = TISCopyCurrentKeyboardLayoutInputSource().takeRetainedValue()
+        return stringProperty(layout, key: kTISPropertyInputSourceID) ?? ""
+    }
+    static var currentLayoutOverrideID: String {
+        guard let layout = TISCopyInputMethodKeyboardLayoutOverride()?.takeRetainedValue() else { return "none" }
+        return stringProperty(layout, key: kTISPropertyInputSourceID) ?? ""
+    }
+}
+
 private final class InputSourceStore {
     private let sourcesByID: [String: TISInputSource]
 
     init(mode: InputMode) throws {
         let requestedIDs = Set(InputSourcePolicy.selectableSourceIDs(for: mode))
+        let active = Set(InputSourceCatalog.enabledKeyboardSourceIDs())
         let allSources = InputSourceCatalog.sourcesByID()
         var sourcesByID: [String: TISInputSource] = [:]
 
         for (sourceID, source) in allSources {
             guard requestedIDs.contains(sourceID),
-                  InputSourceCatalog.isEnabled(source) else {
+                  active.contains(sourceID) else {
                 continue
             }
             sourcesByID[sourceID] = source
@@ -181,14 +194,12 @@ private final class InputSourceStore {
         ) ?? ""
     }
 
-    func select(sourceID: String) throws {
-        guard let source = sourcesByID[sourceID] else {
+    func localizedName(sourceID: String) throws -> String {
+        guard let source = sourcesByID[sourceID],
+              let name = InputSourceCatalog.stringProperty(source, key: kTISPropertyLocalizedName) else {
             throw SwitcherError.missingInputSource(sourceID)
         }
-        let status = TISSelectInputSource(source)
-        guard status == noErr else {
-            throw SwitcherError.carbonCall("TISSelectInputSource", status)
-        }
+        return name
     }
 }
 
@@ -197,6 +208,7 @@ private final class InputSourceSwitcher {
 
     private let mode: InputMode
     private let sourceStore: InputSourceStore
+    private let nativeMenu = NativeInputMenu()
     private var hotKeyRefs: [EventHotKeyRef] = []
     private var pressedHotKeys: [HotKey: UInt64] = [:]
     private var eventSequence = 0
@@ -239,7 +251,9 @@ private final class InputSourceSwitcher {
             throw SwitcherError.carbonCall("InstallEventHandler", handlerStatus)
         }
 
-        for hotKey in (mode.includesJapanese ? [HotKey.primary, .japanese] : [.primary]) {
+        // Globe/Fn stays with macOS and cycles the enabled sources. The helper
+        // owns only F18 (right Command), so Option+1 remains an ordinary chord.
+        for hotKey in [HotKey.primary] {
             var hotKeyRef: EventHotKeyRef?
             let hotKeyID = EventHotKeyID(
                 signature: Self.hotKeySignature,
@@ -260,6 +274,7 @@ private final class InputSourceSwitcher {
         }
 
         // Observe macOS acknowledgements without polling or retrying a switch.
+        let menu = nativeMenu
         sourceObserver = DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
             object: nil,
@@ -269,15 +284,22 @@ private final class InputSourceSwitcher {
             let current = InputSourceCatalog.stringProperty(
                 source, key: kTISPropertyInputSourceID
             ) ?? ""
-            diagnostics.notice("source_changed current=\(current, privacy: .public)")
+            let layout = InputSourceCatalog.currentKeyboardLayoutID
+            diagnostics.notice("source_changed current=\(current, privacy: .public) layout=\(layout, privacy: .public)")
+            menu.prepare()
         }
-        diagnostics.notice("ready mode=\(self.mode.rawValue, privacy: .public) hotkeys=\(self.hotKeyRefs.count) secure=\(IsSecureEventInputEnabled())")
+        nativeMenu.prepare()
+        diagnostics.notice("ready mode=\(self.mode.rawValue, privacy: .public) hotkeys=\(self.hotKeyRefs.count) mechanism=native_input_menu accessibility=\(AXIsProcessTrusted()) secure=\(IsSecureEventInputEnabled())")
     }
 
     func printCheck() {
         print("mode=\(mode.rawValue)")
         print("current=\(sourceStore.currentSourceID)")
+        print("layout=\(InputSourceCatalog.currentKeyboardLayoutID)")
+        print("inputMethodLayoutOverride=\(InputSourceCatalog.currentLayoutOverrideID)")
         print("secureInput=\(IsSecureEventInputEnabled())")
+        print("selectionMechanism=native_input_menu")
+        print("invokingProcessAccessibility=\(AXIsProcessTrusted())")
         print("modifierFlags=\(CGEventSource.flagsState(.combinedSessionState).rawValue)")
         print("english=\(PrimaryInputSource.english.rawValue)")
         print("korean=\(PrimaryInputSource.korean.rawValue)")
@@ -329,21 +351,27 @@ private final class InputSourceSwitcher {
 
     private func perform(_ hotKey: HotKey, sequence: Int, receivedAt: UInt64, queueUS: Int) {
         let before = sourceStore.currentSourceID
-        let target = hotKey == .primary
-            ? InputSourcePolicy.primaryKeyTarget(currentSourceID: before).rawValue
-            : InputSourcePolicy.japaneseSourceID
+        let target = InputSourcePolicy.primaryKeyTarget(currentSourceID: before)
         let selectionStarted = DispatchTime.now().uptimeNanoseconds
         do {
-            try sourceStore.select(sourceID: target)
+            guard let foregroundPID = NSWorkspace.shared.frontmostApplication?.processIdentifier else {
+                throw NativeInputMenu.Failure.unavailable("no foreground application")
+            }
+            try nativeMenu.select(
+                localizedName: sourceStore.localizedName(sourceID: target.rawValue),
+                foregroundPID: foregroundPID
+            )
             let selectionFinished = DispatchTime.now().uptimeNanoseconds
             let apiUS = (selectionFinished - selectionStarted) / 1_000
             let handlerUS = (selectionFinished - receivedAt) / 1_000
             // Readback and logging happen after the immediate selection. A
             // matching ID is not proof that the front app accepted composition.
             let after = sourceStore.currentSourceID
-            diagnostics.notice("switch seq=\(sequence) key=\(hotKey.name, privacy: .public) before=\(before, privacy: .public) target=\(target, privacy: .public) after=\(after, privacy: .public) matched=\(after == target) api_us=\(apiUS) handler_us=\(handlerUS) queue_us=\(queueUS) flags=\(CGEventSource.flagsState(.combinedSessionState).rawValue) secure=\(IsSecureEventInputEnabled())")
+            let layout = InputSourceCatalog.currentKeyboardLayoutID
+            let matched = InputSourcePolicy.selectionMatches(target, sourceID: after, layoutID: layout)
+            diagnostics.notice("switch seq=\(sequence) key=\(hotKey.name, privacy: .public) before=\(before, privacy: .public) target=\(target.rawValue, privacy: .public) after=\(after, privacy: .public) layout=\(layout, privacy: .public) matched=\(matched) api_us=\(apiUS) handler_us=\(handlerUS) queue_us=\(queueUS) flags=\(CGEventSource.flagsState(.combinedSessionState).rawValue) secure=\(IsSecureEventInputEnabled())")
         } catch {
-            diagnostics.error("switch_failed seq=\(sequence) key=\(hotKey.name, privacy: .public) before=\(before, privacy: .public) target=\(target, privacy: .public) error=\(String(describing: error), privacy: .public)")
+            diagnostics.error("switch_failed seq=\(sequence) key=\(hotKey.name, privacy: .public) before=\(before, privacy: .public) target=\(target.rawValue, privacy: .public) error=\(String(describing: error), privacy: .public)")
             FileHandle.standardError.write(
                 Data("input-source-switcher: \(error)\n".utf8)
             )
@@ -387,6 +415,17 @@ let arguments = Array(CommandLine.arguments.dropFirst())
 
 do {
     switch arguments.first {
+    case "_source":
+        if arguments == ["_source", "list"] {
+            let data = try JSONEncoder().encode(InputSourceCatalog.enabledKeyboardSourceIDs())
+            print(String(decoding: data, as: UTF8.self))
+        } else if arguments.count == 3, ["enable", "disable"].contains(arguments[1]) {
+            try InputSourceCatalog.setEnabled(arguments[2], enabled: arguments[1] == "enable")
+        } else {
+            fail(usage, code: EX_USAGE)
+        }
+        exit(EXIT_SUCCESS)
+
     case "--apply-sources":
         guard arguments.count == 2 else {
             fail(usage, code: EX_USAGE)

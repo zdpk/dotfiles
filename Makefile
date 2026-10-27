@@ -2,7 +2,7 @@
 
 .DEFAULT_GOAL := help
 
-# Override per machine: make setup FONT=geist (legacy input: BACKEND=helper MODE=ko-en-ja)
+# Override per machine: make setup FONT=geist (Japanese input: BACKEND=helper MODE=ko-en-ja)
 MODE ?=
 BACKEND ?=
 FONT ?= firacode
@@ -10,16 +10,16 @@ FONT ?= firacode
 help:
 	@printf '%s\n' \
 	  'make setup    Apply common and platform-specific Bash modules' \
-	  'make input-sources  Apply right Cmd -> F18 -> macOS Korean/English switching' \
+	  'make input-sources  Apply the saved per-machine language-switching backend' \
 	  'make input-sources-dry-run  Inspect input-source-only changes' \
-	  'make input-sources-status  Check native configuration without changing it' \
+	  'make input-sources-status  Read the saved backend and current input state' \
 	  'make input-sources-restore  Restore the configuration before native setup' \
 	  'make input-diagnostics  Inspect input switching state and recent logs' \
 	  'make dry-run  Inspect changes without writing' \
 	  'make test     Run the test suite for this platform' \
 	  '' \
 	  'MODE=ko-en     right Command switches English/Korean (default)' \
-	  'BACKEND=helper MODE=ko-en-ja  legacy Swift Japanese configuration' \
+	  'BACKEND=helper MODE=ko-en-ja  Globe: three languages; right Cmd: Korean/English' \
 	  '' \
 	  'FONT=firacode  Ghostty uses FiraCode Nerd Font (default)' \
 	  'FONT=geist     Ghostty uses GeistMono Nerd Font'
@@ -35,7 +35,7 @@ input-sources-dry-run:
 
 .PHONY: input-sources-status input-sources-restore input-native-test
 input-sources-status:
-	./script/native-input.sh status
+	bash ./script/input-sources-status.sh
 
 input-sources-restore:
 	./script/native-input.sh restore

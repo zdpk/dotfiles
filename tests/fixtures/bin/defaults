@@ -4,26 +4,25 @@ set -euo pipefail
 
 : "${DOTFILES_TEST_STATE:?}"
 
-HOTKEY_STATE="$DOTFILES_TEST_STATE/hotkey-60"
-
 # The stock macOS state is a disabled shortcut still bound to Control-Space.
 print_symbolic_hotkeys() {
-  local enabled=false
-  local key_code=49
-  local modifiers=262144
-
-  if [ -f "$HOTKEY_STATE" ]; then
-    read -r enabled key_code modifiers <"$HOTKEY_STATE"
-  fi
-
-  cat <<EOF
+  local hotkey_id enabled key_code modifiers
+  cat <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>AppleSymbolicHotKeys</key>
   <dict>
-    <key>60</key>
+EOF
+  for hotkey_id in 60 61; do
+    enabled=false; key_code=49; modifiers=262144
+    if [ "$hotkey_id" = 61 ]; then enabled=true; key_code=79; modifiers=8388608; fi
+    if [ -f "$DOTFILES_TEST_STATE/hotkey-$hotkey_id" ]; then
+      read -r enabled key_code modifiers <"$DOTFILES_TEST_STATE/hotkey-$hotkey_id"
+    fi
+    cat <<EOF
+    <key>$hotkey_id</key>
     <dict>
       <key>enabled</key>
       <$enabled/>
@@ -31,14 +30,17 @@ print_symbolic_hotkeys() {
       <dict>
         <key>parameters</key>
         <array>
-          <integer>65535</integer>
-          <integer>$key_code</integer>
-          <integer>$modifiers</integer>
+          <real>65535.0</real>
+          <real>$key_code.0</real>
+          <real>$modifiers.0</real>
         </array>
         <key>type</key>
         <string>standard</string>
       </dict>
     </dict>
+EOF
+  done
+  cat <<'EOF'
   </dict>
 </dict>
 </plist>
@@ -50,6 +52,7 @@ EOF
 # plist syntax.
 record_symbolic_hotkey() {
   local value="$1"
+  local hotkey_id="$2"
   local integers
   local enabled
 
@@ -74,7 +77,7 @@ record_symbolic_hotkey() {
     "$enabled" \
     "$(printf '%s\n' "$integers" | sed -n '2p')" \
     "$(printf '%s\n' "$integers" | sed -n '3p')" \
-    >"$HOTKEY_STATE"
+    >"$DOTFILES_TEST_STATE/hotkey-$hotkey_id"
 }
 
 case "${1:-}:${2:-}:${3:-}" in
@@ -104,8 +107,16 @@ case "${1:-}:${2:-}:${3:-}" in
     ;;
   write:com.apple.symbolichotkeys:AppleSymbolicHotKeys)
     [ "${4:-}" = "-dict-add" ]
-    [ "${5:-}" = "60" ]
-    record_symbolic_hotkey "${6:-}"
+    case "${5:-}" in 60 | 61) ;; *) exit 2 ;; esac
+    record_symbolic_hotkey "${6:-}" "$5"
+    ;;
+  read:com.apple.HIToolbox:AppleFnUsageType)
+    [ -f "$DOTFILES_TEST_STATE/globe" ] || exit 1
+    cat "$DOTFILES_TEST_STATE/globe"
+    ;;
+  write:com.apple.HIToolbox:AppleFnUsageType)
+    [ "${4:-}" = "-int" ] && [ "${5:-}" = 1 ]
+    printf '%s\n' 1 >"$DOTFILES_TEST_STATE/globe"
     ;;
   *)
     printf 'unexpected defaults invocation: %s\n' "$*" >&2

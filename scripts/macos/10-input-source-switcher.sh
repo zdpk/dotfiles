@@ -52,11 +52,13 @@ TOOL_BINARY=""
 # Disable the old native input shortcut to avoid double-handling F18.
 SYMBOLIC_HOTKEYS_DOMAIN=com.apple.symbolichotkeys
 PREVIOUS_SOURCE_HOTKEY_ID=60
+NEXT_SOURCE_HOTKEY_ID=61
 SPACE_KEY_CODE=49
 CONTROL_MODIFIER=262144
 # Written as XML so the types match what macOS writes: enabled is a boolean, not
 # the integer that old-style plist syntax would produce.
 HOTKEY_STOCK_VALUE='<dict><key>enabled</key><false/><key>value</key><dict><key>type</key><string>standard</string><key>parameters</key><array><integer>32</integer><integer>49</integer><integer>262144</integer></array></dict></dict>'
+NEXT_HOTKEY_VALUE='<dict><key>enabled</key><false/><key>value</key><dict><key>type</key><string>standard</string><key>parameters</key><array><integer>65535</integer><integer>79</integer><integer>8388608</integer></array></dict></dict>'
 
 MAPPING_DESCRIPTION='right Command -> F18'
 EXPECTED_MAPPING_ENTRIES=1
@@ -238,28 +240,30 @@ normalize_boolean() {
 
 symbolic_hotkey_field() {
   local export_path="$1"
-  local field="$2"
+  local hotkey_id="$2"
+  local field="$3"
 
   "$PLIST_BUDDY" \
-    -c "Print :AppleSymbolicHotKeys:$PREVIOUS_SOURCE_HOTKEY_ID:$field" \
-    "$export_path" 2>/dev/null || true
+    -c "Print :AppleSymbolicHotKeys:$hotkey_id:$field" \
+    "$export_path" 2>/dev/null | sed -E 's/^([0-9]+)\.0+$/\1/' || true
 }
 
 # The modifier mask is compared too. Without it an entry left over from an
 # earlier revision, bound to the right key but the wrong mask, would read as
 # already correct and never be repaired.
 symbolic_hotkey_matches() {
-  local want_enabled="$1"
-  local want_key_code="$2"
-  local want_modifiers="$3"
+  local hotkey_id="$1"
+  local want_enabled="$2"
+  local want_key_code="$3"
+  local want_modifiers="$4"
   local export_path
   local status=1
 
   export_path="$(mktemp "${TMPDIR:-/tmp}/dotfiles-symbolichotkeys.XXXXXX")"
   if "$DEFAULTS" export "$SYMBOLIC_HOTKEYS_DOMAIN" - >"$export_path" 2>/dev/null; then
-    if [ "$(normalize_boolean "$(symbolic_hotkey_field "$export_path" enabled)")" = "$want_enabled" ] \
-      && [ "$(symbolic_hotkey_field "$export_path" 'value:parameters:1')" = "$want_key_code" ] \
-      && [ "$(symbolic_hotkey_field "$export_path" 'value:parameters:2')" = "$want_modifiers" ]; then
+    if [ "$(normalize_boolean "$(symbolic_hotkey_field "$export_path" "$hotkey_id" enabled)")" = "$want_enabled" ] \
+      && [ "$(symbolic_hotkey_field "$export_path" "$hotkey_id" 'value:parameters:1')" = "$want_key_code" ] \
+      && [ "$(symbolic_hotkey_field "$export_path" "$hotkey_id" 'value:parameters:2')" = "$want_modifiers" ]; then
       status=0
     fi
   fi
@@ -269,19 +273,20 @@ symbolic_hotkey_matches() {
 }
 
 apply_symbolic_hotkey() {
-  local want_enabled="$1"
-  local want_key_code="$2"
-  local want_modifiers="$3"
-  local value="$4"
-  local description="$5"
+  local hotkey_id="$1"
+  local want_enabled="$2"
+  local want_key_code="$3"
+  local want_modifiers="$4"
+  local value="$5"
+  local description="$6"
 
-  if symbolic_hotkey_matches "$want_enabled" "$want_key_code" "$want_modifiers"; then
+  if symbolic_hotkey_matches "$hotkey_id" "$want_enabled" "$want_key_code" "$want_modifiers"; then
     log "unchanged: $description"
     return 0
   fi
 
   run "$DEFAULTS" write "$SYMBOLIC_HOTKEYS_DOMAIN" AppleSymbolicHotKeys \
-    -dict-add "$PREVIOUS_SOURCE_HOTKEY_ID" "$value"
+    -dict-add "$hotkey_id" "$value"
   run "$ACTIVATE_SETTINGS" -u
 
   if is_dry_run; then
@@ -289,7 +294,7 @@ apply_symbolic_hotkey() {
     return 0
   fi
 
-  if ! symbolic_hotkey_matches "$want_enabled" "$want_key_code" "$want_modifiers"; then
+  if ! symbolic_hotkey_matches "$hotkey_id" "$want_enabled" "$want_key_code" "$want_modifiers"; then
     die "the input-source hotkey did not persist"
   fi
   log "applied $description"
@@ -300,6 +305,8 @@ mapping_matches() {
   local entry_count
 
   mapping="$("$HIDUTIL" property --get UserKeyMapping 2>/dev/null || true)"
+  # macOS may repeat the same mapping for every HID service.
+  mapping="$(printf '%s\n' "$mapping" | awk '/HIDKeyboardModifierMapping(Src|Dst) =/ { print $1, "=", $3 }' | sort -u)"
   entry_count="$(printf '%s\n' "$mapping" | grep -c 'HIDKeyboardModifierMappingSrc =' || true)"
 
   [ "$entry_count" -eq "$EXPECTED_MAPPING_ENTRIES" ] || return 1
@@ -307,6 +314,7 @@ mapping_matches() {
     | grep -q "HIDKeyboardModifierMappingSrc = $RIGHT_COMMAND_DECIMAL;" || return 1
   printf '%s\n' "$mapping" \
     | grep -q "HIDKeyboardModifierMappingDst = $F18_DECIMAL;" || return 1
+  [ "$(printf '%s\n' "$mapping" | grep -c 'HIDKeyboardModifierMappingDst =' || true)" -eq "$EXPECTED_MAPPING_ENTRIES" ] || return 1
 
   return 0
 }
@@ -337,8 +345,21 @@ log "input mode: $INPUT_MODE"
 check_remapper_conflicts
 remove_legacy_cycle_agent
 
-apply_symbolic_hotkey false "$SPACE_KEY_CODE" "$CONTROL_MODIFIER" \
+apply_symbolic_hotkey "$PREVIOUS_SOURCE_HOTKEY_ID" false "$SPACE_KEY_CODE" "$CONTROL_MODIFIER" \
   "$HOTKEY_STOCK_VALUE" "native previous-input-source hotkey disabled"
+apply_symbolic_hotkey "$NEXT_SOURCE_HOTKEY_ID" false 79 8388608 \
+  "$NEXT_HOTKEY_VALUE" "native next-input-source hotkey disabled"
+# Globe is independent of shortcut 61. macOS cycles all enabled sources here.
+if [ "$("$DEFAULTS" read com.apple.HIToolbox AppleFnUsageType 2>/dev/null || true)" != 1 ]; then
+  run "$DEFAULTS" write com.apple.HIToolbox AppleFnUsageType -int 1
+  run "$ACTIVATE_SETTINGS" -u
+  if ! is_dry_run && [ "$("$DEFAULTS" read com.apple.HIToolbox AppleFnUsageType)" != 1 ]; then
+    die "the Globe input-source setting did not persist"
+  fi
+  log "set Globe to change input source"
+else
+  log "unchanged: Globe changes input source"
+fi
 apply_input_sources
 install_switcher_binary
 binary_changed="$DOTFILES_FILE_CHANGED"
