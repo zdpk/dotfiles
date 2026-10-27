@@ -134,6 +134,40 @@ remains withdrawn. See the
 Source/layout readback confirms configuration, not error-free IME composition during
 rapid typing. See the [Globe/helper design](docs/plans/2026-10-27-globe-helper-design.md).
 
+### Input switching push gate
+
+The hook uses Python 3's standard library. Enable it with
+`git config core.hooksPath .githooks`. Swift-helper changes require a local approval for the pushed Git blobs, rebuilt
+and installed binary, host/OS, saved mode and input settings. The hook reads state;
+it never types, changes sources, restarts the helper or grants permissions.
+
+After committing a candidate and completing its automatic and physical checks,
+seal the accepted evidence:
+
+```bash
+python3 script/input-source-gate.py approve --revision HEAD \
+  --automatic "$INPUT_VERIFICATION_DIR/AX-F18-final-resident-80.json" \
+  --automatic-helper-log "$INPUT_VERIFICATION_DIR/AX-F18-final-resident-helper.log" \
+  --physical-report "$INPUT_VERIFICATION_DIR/AX-physical-accepted-report.json" \
+  --physical-trace "$INPUT_VERIFICATION_DIR/AX-physical-accepted-trace.jsonl" \
+  --physical-helper-log "$INPUT_VERIFICATION_DIR/AX-physical-accepted-helper.log"
+python3 script/input-source-gate.py check --revision HEAD
+```
+
+`INPUT_VERIFICATION_DIR` is the directory containing that candidate's raw records.
+Approval rebuilds the working Swift package, checks that it belongs to the chosen
+commit and matches the physically tested binary, then runs `make test` and
+`swift test` in an export of that commit. Evidence is copied with hashes into
+`~/.local/state/dotfiles/input-source-gate/`; it stays outside Git.
+
+A source/layout mismatch, wrong physical character, missing manual checklist,
+changed evidence, different binary/configuration or untested pushed tree blocks
+the update. Unrelated dirty files and untracked experiments are excluded from
+the pushed-tree comparison. Docs-only updates need no new physical trial.
+Fcitx/experimental input changes still require the existing experiment gate;
+Swift approval cannot authorize them. See the
+[gate design and acceptance](docs/plans/2026-10-28-swift-input-push-gate-design.md).
+
 ## macOS text input
 
 The second macOS module owns the global typing defaults that belong with the

@@ -15,6 +15,7 @@ TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-tests.XXXXXX")"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
 node --test "$ROOT/tests/native-input.test.cjs"
+python3 "$ROOT/tests/test_input_source_gate.py"
 # The existing fixture suite below covers the retained Swift backend explicitly.
 export DOTFILES_INPUT_BACKEND=helper
 
